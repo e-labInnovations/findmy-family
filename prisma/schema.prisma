@@ -1,0 +1,88 @@
+// findmy-family — schema
+//
+// V1 scope (decided 2026-06-09):
+//   - Family-scoped, one deployment
+//   - Members log in with email + password
+//   - Admin links a single Apple ID for the whole family
+//   - Accessories CRUD with M:N owners + one primary
+//   - No location_history table yet (Apple's 7-day window is enough for V1)
+//   - No status derivation (UI computes 'online'/'offline' from last_update)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(MEMBER)
+  name         String
+  title        String?  // e.g. "Teen · 16", "Parent"
+  color        String   // OKLCH palette id from data.jsx (blue/teal/green/...)
+  initials     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownerships AccessoryOwner[]
+}
+
+enum UserRole {
+  ADMIN   // family organizer — links Apple ID, manages members
+  MEMBER
+}
+
+model Accessory {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // phone | tablet | laptop | watch | car | tag | pet | kid
+  color           String   // OKLCH palette id
+  // Apple FindMy keys. The private key is the secret that decrypts reports;
+  // hashedAdvKey = SHA256(P.x) is the lookup id we hand to Apple.
+  privateKeyEnc   String   // base64 of (iv || ct || tag) encrypted with master key
+  hashedAdvKey    String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owners AccessoryOwner[]
+}
+
+model AccessoryOwner {
+  accessoryId String
+  userId      String
+  isPrimary   Boolean @default(false)
+
+  accessory Accessory @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([accessoryId, userId])
+  @@index([userId])
+}
+
+// Single row. Apple identity that powers the whole family app.
+// Only the admin can update it.
+model AppleAccount {
+  id              String   @id @default("singleton")
+  appleId         String   // email; not unique because we may delete + reinsert
+  dsidEnc         String   // base64-encrypted Apple "dsid" returned by GSA
+  spTokenEnc      String   // base64-encrypted searchPartyToken (bearer for /acsnservice/fetch)
+  expiresAt       DateTime // when spToken needs re-auth
+  updatedAt       DateTime @updatedAt
+}
+
+// Nominatim reverse-geocode results. Hit free OSM endpoint at most 1 req/sec.
+// Cache keyed on lat/lng rounded to 4 decimals (~10m precision).
+model GeocodeCache {
+  id        String   @id @default(cuid())
+  latRound  Float
+  lngRound  Float
+  place     String
+  createdAt DateTime @default(now())
+
+  @@unique([latRound, lngRound])
+}

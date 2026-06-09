@@ -1,0 +1,16 @@
+services:
+  anisette:
+    image: dadoum/anisette-v3-server
+    container_name: findmy-anisette
+    restart: unless-stopped
+    ports:
+      - "6969:6969"
+    volumes:
+      - anisette-data:/home/Alcoholic/.config/anisette-v3
+
+volumes:
+  anisette-data:
+
+# Postgres is intentionally NOT defined here — the developer is expected
+# to point DATABASE_URL at their own running Postgres instance. See
+# .env.example for the connection string format.
