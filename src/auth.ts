@@ -1,21 +1,16 @@
 /**
- * Auth.js v5 (NextAuth 5 beta) config.
+ * Auth.js v5 (NextAuth 5 beta) — full config.
  *
- * Member auth: email + password, verified against the User table.
- * Sessions: JWT (Credentials provider doesn't support DB sessions).
- *
- * Usage in server code:
- *   import { auth, signIn, signOut } from '@/auth';
- *   const session = await auth();
- *
- * Usage in route handlers (just the API mounting):
- *   src/app/api/auth/[...nextauth]/route.ts re-exports handlers.GET/POST.
+ * Pulls in bcrypt + Prisma, so DO NOT import this from middleware
+ * (edge runtime can't load Node-only modules). Middleware uses
+ * src/auth.config.ts which has no Node deps.
  */
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { authConfig } from "@/auth.config";
 
 declare module "next-auth" {
   interface Session {
@@ -35,10 +30,7 @@ const CredentialsSchema = z.object({
 });
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       name: "Family credentials",
@@ -66,18 +58,4 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    jwt: async ({ token, user }) => {
-      if (user) {
-        (token as { role?: "ADMIN" | "MEMBER" }).role = user.role;
-      }
-      return token;
-    },
-    session: async ({ session, token }) => {
-      if (token.sub) session.user.id = token.sub;
-      const role = (token as { role?: "ADMIN" | "MEMBER" }).role;
-      if (role) session.user.role = role;
-      return session;
-    },
-  },
 });

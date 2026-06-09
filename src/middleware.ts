@@ -1,15 +1,13 @@
 /**
- * Route gating.
- *
- * - /setup and /login are always reachable
- * - /api/auth/* is reachable (Auth.js handlers)
- * - everything else requires a session
- *
- * Server components do the final "user exists?" + "is admin?" checks;
- * middleware only handles the "signed in vs not" cut.
+ * Edge-runtime middleware. Uses the edge-safe auth config (no bcrypt,
+ * no Prisma) so it boots in the edge runtime without pulling in
+ * Node-only modules.
  */
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = ["/setup", "/login"];
 
@@ -23,14 +21,12 @@ export default auth((req) => {
   }
 
   if (!session?.user) {
-    const url = new URL("/login", nextUrl.origin);
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(new URL("/login", nextUrl.origin));
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  // Skip Next.js internals and static files.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)"],
 };
