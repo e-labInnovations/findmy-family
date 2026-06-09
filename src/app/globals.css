@@ -1,26 +1,287 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   FindMy Family — design tokens
+   Ported from /tmp/findmy_design/findmy/project/app.css (the
+   chat-bundle design). OKLCH palette keeps hue consistent across
+   dark/light themes; surfaces scale by lightness.
+   ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  --bg: oklch(0.165 0.012 264);
+  --bg-grad: radial-gradient(
+    120% 80% at 50% -10%,
+    oklch(0.22 0.03 264) 0%,
+    oklch(0.165 0.012 264) 60%
+  );
+  --surface: oklch(0.215 0.013 264);
+  --surface-2: oklch(0.255 0.015 264);
+  --surface-3: oklch(0.3 0.016 264);
+  --border: oklch(0.32 0.014 264 / 0.9);
+  --border-soft: oklch(0.32 0.014 264 / 0.5);
+  --text: oklch(0.975 0.004 264);
+  --text-dim: oklch(0.74 0.012 264);
+  --text-faint: oklch(0.56 0.012 264);
+  --accent: oklch(0.64 0.17 255);
+  --accent-strong: oklch(0.7 0.17 255);
+  --accent-soft: oklch(0.64 0.17 255 / 0.16);
+  --on-accent: oklch(0.99 0.01 255);
+  --danger: oklch(0.64 0.2 22);
+  --success: oklch(0.7 0.16 152);
+  --warn: oklch(0.78 0.15 75);
+  --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: oklch(0.965 0.004 264);
+  --bg-grad: radial-gradient(
+    120% 80% at 50% -10%,
+    oklch(0.98 0.012 255) 0%,
+    oklch(0.955 0.004 264) 60%
+  );
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.975 0.004 264);
+  --surface-3: oklch(0.945 0.006 264);
+  --border: oklch(0.9 0.006 264);
+  --border-soft: oklch(0.92 0.005 264 / 0.8);
+  --text: oklch(0.22 0.012 264);
+  --text-dim: oklch(0.46 0.012 264);
+  --text-faint: oklch(0.62 0.012 264);
+  --accent: oklch(0.55 0.18 255);
+  --accent-strong: oklch(0.5 0.18 255);
+  --accent-soft: oklch(0.55 0.18 255 / 0.12);
+  --on-accent: oklch(0.99 0.01 255);
+  --danger: oklch(0.56 0.21 22);
+  --success: oklch(0.55 0.15 152);
+  --warn: oklch(0.7 0.15 75);
+  --scrim: rgba(20, 24, 33, 0.32);
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", "Roboto Mono", Menlo,
+    monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-grad);
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ---------- auth screen primitives ---------- */
+.auth-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  position: relative;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  padding: 32px 28px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.auth-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+}
+
+.auth-wordmark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.wm-find {
+  color: var(--text);
+}
+.wm-my {
+  color: var(--accent);
+}
+
+.auth-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-body h1 {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.auth-body p {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.auth-field:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.auth-field input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.auth-field input::placeholder {
+  color: var(--text-faint);
+}
+
+.auth-err {
+  color: var(--danger);
+  font-size: 13px;
+  padding: 0 4px;
+}
+
+.auth-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.auth-foot {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 50px;
+  padding: 0 22px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 16px;
+  font-weight: 600;
+  transition: filter 0.15s, transform 0.1s, background 0.15s;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+}
+.btn:hover {
+  filter: brightness(1.08);
+}
+.btn:active {
+  transform: scale(0.985);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.secondary {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.btn.secondary:hover {
+  background: var(--surface-3);
+  filter: none;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  border: none;
+}
+.icon-btn:hover {
+  background: var(--surface-3);
 }
