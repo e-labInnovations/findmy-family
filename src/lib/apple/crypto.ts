@@ -21,8 +21,7 @@
  *     confidence (u8)
  *     status     (u8)
  */
-import { createDecipheriv, createHash } from "node:crypto";
-import { p224 } from "@noble/curves/nist";
+import { createDecipheriv, createECDH, createHash } from "node:crypto";
 
 export interface DecryptedReport {
   lat: number;
@@ -56,21 +55,21 @@ export function decryptReport(payloadB64: string, privateKey: Buffer): Decrypted
   // First 4 bytes are an Apple-epoch seconds timestamp.
   const timestamp = data.readUInt32BE(0) + APPLE_EPOCH_OFFSET;
 
-  // Bytes [5..62) are the finder iPhone's compressed P-224 public key
-  // (57 bytes, leading 0x02/0x03 indicator). data[62..62+ct_len] = ciphertext.
+  // Bytes [5..62) are the finder iPhone's uncompressed P-224 public key
+  // (57 bytes: 0x04 prefix + 28-byte X + 28-byte Y). data[62..end-16] = ciphertext.
   // data[last 16] = AES-GCM tag.
-  const ephPubCompressed = data.subarray(5, 62);
+  const ephPubUncompressed = data.subarray(5, 62);
   const ct = data.subarray(62, data.length - 16);
   const tag = data.subarray(data.length - 16);
 
-  // ECDH on P-224.
-  // @noble/curves returns the compressed shared secret prefixed with 0x02/0x03,
-  // we want the raw X (28 bytes).
-  const sharedFull = p224.getSharedSecret(privateKey, ephPubCompressed);
-  const sharedX = Buffer.from(sharedFull).subarray(1, 29);
+  // ECDH on P-224 via Node's built-in crypto. computeSecret returns the
+  // raw X coordinate of the shared point (28 bytes), no prefix.
+  const ecdh = createECDH("secp224r1");
+  ecdh.setPrivateKey(privateKey);
+  const sharedX = ecdh.computeSecret(ephPubUncompressed);
 
-  // ANSI X9.63 KDF: SHA-256(shared || 0x00 0x00 0x00 0x01 || ephPubCompressed)
-  const symmetric = sha256(sharedX, Buffer.from([0, 0, 0, 1]), ephPubCompressed);
+  // ANSI X9.63 KDF: SHA-256(shared || 0x00 0x00 0x00 0x01 || ephPubUncompressed)
+  const symmetric = sha256(sharedX, Buffer.from([0, 0, 0, 1]), ephPubUncompressed);
   const encKey = symmetric.subarray(0, 16);
   const iv = symmetric.subarray(16, 32);
 
