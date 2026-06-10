@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
 import { bleMacFromAdvKey } from "@/lib/ble-mac";
+import { getReportsForAccessory } from "@/lib/apple/get-reports";
 import { removeAccessory } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,22 @@ export default async function AccessoryDetailPage({
   if (!isAdmin && !isOwner) forbidden();
 
   const primary = acc.owners.find((o) => o.isPrimary);
+
+  // Best-effort report fetch. Apple network errors / token expiry shouldn't
+  // break the page — show a fallback card and let the user retry.
+  let reportsState:
+    | { kind: "no-account" }
+    | { kind: "none" }
+    | { kind: "ok"; lat: number; lng: number; timestamp: number; confidence: number; status: number }
+    | { kind: "error"; message: string };
+  try {
+    const reports = await getReportsForAccessory(acc.id, { days: 7 });
+    if (reports === null) reportsState = { kind: "no-account" };
+    else if (!reports.latest) reportsState = { kind: "none" };
+    else reportsState = { kind: "ok", ...reports.latest };
+  } catch (e) {
+    reportsState = { kind: "error", message: e instanceof Error ? e.message : "Apple fetch failed" };
+  }
 
   return (
     <>
@@ -108,25 +125,7 @@ export default async function AccessoryDetailPage({
           </span>
         </div>
 
-        <div
-          style={{
-            padding: 24,
-            background: "var(--surface)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: "var(--radius-md)",
-            textAlign: "center",
-            color: "var(--text-dim)",
-          }}
-        >
-          <strong style={{ display: "block", marginBottom: 4 }}>
-            No location yet
-          </strong>
-          <span style={{ fontSize: 13 }}>
-            The map view + report fetching ship in a later phase. Once the
-            organizer links an Apple Account, this accessory&apos;s last seen
-            location will show up here.
-          </span>
-        </div>
+        <LocationCard state={reportsState} isAdmin={isAdmin} />
 
         <span className="field-label" style={{ padding: "12px 4px 0" }}>
           {acc.owners.length}{" "}
@@ -198,6 +197,101 @@ export default async function AccessoryDetailPage({
       {primary && null /* placate unused-var on primary; kept for later */}
     </>
   );
+}
+
+type LocationState =
+  | { kind: "no-account" }
+  | { kind: "none" }
+  | { kind: "ok"; lat: number; lng: number; timestamp: number; confidence: number; status: number }
+  | { kind: "error"; message: string };
+
+function LocationCard({ state, isAdmin }: { state: LocationState; isAdmin: boolean }) {
+  const surface = {
+    padding: 18,
+    background: "var(--surface)",
+    border: "1px solid var(--border-soft)",
+    borderRadius: "var(--radius-md)",
+  } as const;
+
+  if (state.kind === "no-account") {
+    return (
+      <div style={{ ...surface, textAlign: "center", color: "var(--text-dim)" }}>
+        <strong style={{ display: "block", marginBottom: 4 }}>No Apple Account linked</strong>
+        <span style={{ fontSize: 13 }}>
+          {isAdmin ? (
+            <>
+              <Link href="/settings/apple" style={{ color: "var(--accent)" }}>
+                Link Apple
+              </Link>{" "}
+              to start seeing locations.
+            </>
+          ) : (
+            "Ask the organizer to link Apple in Settings."
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  if (state.kind === "none") {
+    return (
+      <div style={{ ...surface, textAlign: "center", color: "var(--text-dim)" }}>
+        <strong style={{ display: "block", marginBottom: 4 }}>No reports in the last 7 days</strong>
+        <span style={{ fontSize: 13 }}>
+          Make sure the tracker is powered and within Bluetooth range of an iPhone.
+        </span>
+      </div>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <div style={{ ...surface, textAlign: "center", color: "var(--text-dim)" }}>
+        <strong style={{ display: "block", marginBottom: 4 }}>Couldn&apos;t reach Apple</strong>
+        <span style={{ fontSize: 13, fontFamily: "var(--font-mono)" }}>{state.message}</span>
+      </div>
+    );
+  }
+
+  const when = new Date(state.timestamp * 1000);
+  const ago = relativeTime(when);
+  const osmHref = `https://www.openstreetmap.org/?mlat=${state.lat}&mlon=${state.lng}#map=17/${state.lat}/${state.lng}`;
+
+  return (
+    <div style={surface}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+        <strong style={{ fontSize: 15 }}>Last seen</strong>
+        <span style={{ color: "var(--text-faint)", fontSize: 12 }}>{ago}</span>
+      </div>
+      <div style={{ fontSize: 13, fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
+        {state.lat.toFixed(6)}, {state.lng.toFixed(6)}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>
+        confidence {state.confidence} &middot; status 0x{state.status.toString(16).padStart(2, "0")}
+        &middot; {when.toLocaleString()}
+      </div>
+      <a
+        href={osmHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn primary"
+        style={{ marginTop: 12, display: "inline-block" }}
+      >
+        Open in OpenStreetMap
+      </a>
+    </div>
+  );
+}
+
+function relativeTime(d: Date): string {
+  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
 }
 
 function Detail({

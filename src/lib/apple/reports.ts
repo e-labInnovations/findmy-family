@@ -16,6 +16,8 @@
  */
 
 import { decryptReport, type DecryptedReport } from "./crypto";
+import { appleFetch, appleInsecureDispatcher } from "./gsa-transport";
+import { buildAnisetteEnvelope } from "./gsa-headers";
 
 export interface ReportLookup {
   /** SHA-256(P.x) base64 — matches a row in Accessory.hashedAdvKey */
@@ -54,14 +56,17 @@ export async function fetchReports(
 
   const credsB64 = Buffer.from(`${auth.dsid}:${auth.spToken}`).toString("base64");
 
-  const resp = await fetch("https://gateway.icloud.com/acsnservice/fetch", {
+  const anisette = await buildAnisetteEnvelope();
+  const resp = await appleFetch("https://gateway.icloud.com/acsnservice/fetch", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${credsB64}`,
       "User-Agent": "FindMy-Family/0.1",
+      ...anisette,
     },
     body: JSON.stringify(body),
+    dispatcher: appleInsecureDispatcher,
   });
 
   if (!resp.ok) {
