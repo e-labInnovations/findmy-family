@@ -1,14 +1,16 @@
 /**
  * Server-side helper: load AppleAccount tokens + accessory keys, call
- * Apple's /acsnservice/fetch, decrypt the matching reports, return
- * them grouped by accessory.
+ * Apple's /acsnservice/fetch, upsert decrypted reports into the
+ * LocationReport table, then return the union of (fresh + historical).
  *
- * Returns null (rather than throwing) when:
- *   - no AppleAccount row exists (admin hasn't linked yet)
- *   - the tokens have expired (caller should re-link)
+ * Apple's window is 7 days. Once we have any history for an accessory
+ * we narrow the query window to (lastIngestedAt - 1h, now) so we don't
+ * waste a 7-day query just to find one new ping. The -1h overlap
+ * absorbs clock skew and ensures we never lose a report on the seam.
  *
- * Throws on network/decrypt errors so callers can show "couldn't
- * reach Apple, try again" without confusing it with "never linked".
+ * Returns null (rather than throwing) when the admin hasn't linked an
+ * Apple Account yet — caller distinguishes "never had any data" from
+ * "Apple is down" by catching the throw separately.
  */
 import "server-only";
 import { db } from "@/lib/db";
@@ -17,75 +19,158 @@ import { fetchReports, type ReportResult } from "./reports";
 
 export interface ReportsForAccessory {
   accessoryId: string;
-  /** Most recent report by datePublished, or null if no reports in the window. */
-  latest: ReportResult | null;
-  /** All reports returned by Apple for this accessory, newest first. */
-  all: ReportResult[];
+  /** Most recent report ever ingested, or null if none. */
+  latest: HistoricalReport | null;
+  /** All historical reports for this accessory, newest first. */
+  all: HistoricalReport[];
 }
 
-/**
- * Pulls reports for a single accessory id. Convenience wrapper around
- * fetchReportsFor when the caller only cares about one accessory.
- */
+export interface HistoricalReport {
+  lat: number;
+  lng: number;
+  confidence: number;
+  status: number;
+  /** Seconds since Unix epoch — when the finder phone saw the tracker. */
+  timestamp: number;
+  /** Milliseconds since Unix epoch — when Apple recorded the relay. */
+  publishedAt: number;
+}
+
+/** Convenience wrapper for single-accessory pages. */
 export async function getReportsForAccessory(
   accessoryId: string,
-  options: { days?: number } = {},
+  options: { days?: number; refresh?: boolean } = {},
 ): Promise<ReportsForAccessory | null> {
-  const all = await fetchReportsFor([accessoryId], options);
+  const all = await fetchAndIngest([accessoryId], options);
   if (all === null) return null;
-  return all.find((r) => r.accessoryId === accessoryId) ?? {
-    accessoryId,
-    latest: null,
-    all: [],
-  };
+  return all[0] ?? { accessoryId, latest: null, all: [] };
 }
 
-/**
- * Pulls reports for a batch of accessory ids in a single Apple call.
- * Use this from /map (which renders many accessories) instead of
- * looping getReportsForAccessory.
- */
-export async function fetchReportsFor(
+/** Bulk version used by /map (single Apple call for the whole list). */
+export async function fetchAndIngest(
   accessoryIds: string[],
-  options: { days?: number } = {},
+  options: { days?: number; refresh?: boolean } = {},
 ): Promise<ReportsForAccessory[] | null> {
   if (accessoryIds.length === 0) return [];
 
   const account = await db.appleAccount.findUnique({ where: { id: "singleton" } });
   if (!account) return null;
-  if (account.expiresAt.getTime() < Date.now()) return null;
+  const tokensExpired = account.expiresAt.getTime() < Date.now();
 
   const accessories = await db.accessory.findMany({
     where: { id: { in: accessoryIds } },
     select: { id: true, privateKeyEnc: true, hashedAdvKey: true },
   });
-
-  const lookups = accessories.map((a) => ({
-    hashedAdvKey: a.hashedAdvKey,
-    privateKey: decryptAtRest(a.privateKeyEnc),
-  }));
   const byHash = new Map(accessories.map((a) => [a.hashedAdvKey, a.id]));
 
-  const dsid = decryptAtRest(account.dsidEnc).toString("utf-8");
-  const spToken = decryptAtRest(account.spTokenEnc).toString("utf-8");
+  // Skip Apple roundtrip if tokens are expired — fall through to DB-only
+  // history so the page still renders.
+  if (!tokensExpired) {
+    // Compute per-accessory ingest window. We use a single Apple call for
+    // the whole batch, so the window must be the WIDEST across all
+    // accessories (per-accessory pruning happens after we have the data).
+    const lastTimestamps = await db.locationReport.groupBy({
+      by: ["accessoryId"],
+      where: { accessoryId: { in: accessoryIds } },
+      _max: { timestamp: true },
+    });
+    const widestStart = computeStart(lastTimestamps, options.days ?? 7);
+    const endDate = Date.now();
 
-  const flat = await fetchReports({ dsid, spToken }, lookups, options);
+    const lookups = accessories.map((a) => ({
+      hashedAdvKey: a.hashedAdvKey,
+      privateKey: decryptAtRest(a.privateKeyEnc),
+    }));
 
-  // Group by accessory id; sort each group newest first.
-  const grouped = new Map<string, ReportResult[]>();
-  for (const r of flat) {
-    const accId = byHash.get(r.hashedAdvKey);
-    if (!accId) continue;
-    const list = grouped.get(accId) ?? [];
-    list.push(r);
-    grouped.set(accId, list);
+    const dsid = decryptAtRest(account.dsidEnc).toString("utf-8");
+    const spToken = decryptAtRest(account.spTokenEnc).toString("utf-8");
+
+    const flat = await fetchReports(
+      { dsid, spToken },
+      lookups,
+      { startDateMs: widestStart, endDateMs: endDate },
+    );
+
+    if (flat.length > 0) {
+      await persistReports(flat, byHash);
+    }
   }
-  return accessories.map((a) => {
-    const list = (grouped.get(a.id) ?? []).sort((x, y) => y.timestamp - x.timestamp);
-    return {
-      accessoryId: a.id,
-      latest: list[0] ?? null,
-      all: list,
-    };
+
+  // Read EVERYTHING for these accessories — that's what "history" buys us.
+  // If a tracker has years of data, the detail page will cap rendering;
+  // bulk callers can apply their own slice.
+  const rows = await db.locationReport.findMany({
+    where: { accessoryId: { in: accessoryIds } },
+    orderBy: { timestamp: "desc" },
   });
+
+  const grouped = new Map<string, HistoricalReport[]>();
+  for (const r of rows) {
+    const list = grouped.get(r.accessoryId) ?? [];
+    list.push({
+      lat: r.lat,
+      lng: r.lng,
+      confidence: r.confidence,
+      status: r.status,
+      timestamp: Math.floor(r.timestamp.getTime() / 1000),
+      publishedAt: r.publishedAt.getTime(),
+    });
+    grouped.set(r.accessoryId, list);
+  }
+
+  return accessories.map((a) => {
+    const list = grouped.get(a.id) ?? [];
+    return { accessoryId: a.id, latest: list[0] ?? null, all: list };
+  });
+}
+
+async function persistReports(
+  flat: ReportResult[],
+  byHash: Map<string, string>,
+) {
+  // Each report becomes one upsert. Composite unique (accessoryId, timestamp)
+  // means duplicates are no-ops. We batch in a tx so partial failures don't
+  // leave half-ingested gaps.
+  await db.$transaction(
+    flat
+      .map((r) => {
+        const accessoryId = byHash.get(r.hashedAdvKey);
+        if (!accessoryId) return null;
+        const ts = new Date(r.timestamp * 1000);
+        return db.locationReport.upsert({
+          where: {
+            accessoryId_timestamp: { accessoryId, timestamp: ts },
+          },
+          create: {
+            accessoryId,
+            lat: r.lat,
+            lng: r.lng,
+            confidence: r.confidence,
+            status: r.status,
+            timestamp: ts,
+            publishedAt: new Date(r.publishedAt ?? r.timestamp * 1000),
+            payload: r.payload,
+            statusCode: r.statusCode ?? 0,
+          },
+          update: {}, // unchanged on re-ingest
+        });
+      })
+      .filter((q): q is NonNullable<typeof q> => q !== null),
+  );
+}
+
+function computeStart(
+  perAccessory: Array<{ accessoryId: string; _max: { timestamp: Date | null } }>,
+  fallbackDays: number,
+): number {
+  const fallbackStart = Date.now() - fallbackDays * 24 * 60 * 60 * 1000;
+  if (perAccessory.length === 0) return fallbackStart;
+  // Earliest "last seen" across the batch. -1h overlap.
+  const earliest = perAccessory.reduce<number>((min, row) => {
+    const ts = row._max.timestamp?.getTime();
+    if (ts == null) return fallbackStart;
+    return Math.min(min, ts);
+  }, Number.POSITIVE_INFINITY);
+  if (earliest === Number.POSITIVE_INFINITY) return fallbackStart;
+  return earliest - 60 * 60 * 1000;
 }

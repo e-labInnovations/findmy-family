@@ -6,7 +6,8 @@ import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
 import { bleMacFromAdvKey } from "@/lib/ble-mac";
 import { getReportsForAccessory } from "@/lib/apple/get-reports";
-import { removeAccessory } from "./actions";
+import { refreshAccessory, removeAccessory } from "./actions";
+import { RotateCw } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,17 @@ export default async function AccessoryDetailPage({
         </Link>
         <h1>Accessory</h1>
         <span className="spacer" />
+        <form action={refreshAccessory} style={{ display: "inline-flex" }}>
+          <input type="hidden" name="id" value={acc.id} />
+          <button
+            type="submit"
+            className="icon-btn"
+            title="Refresh"
+            aria-label="Refresh"
+          >
+            <RotateCw size={18} aria-hidden />
+          </button>
+        </form>
         {isAdmin && (
           <Link
             href={`/map/${acc.id}/edit`}

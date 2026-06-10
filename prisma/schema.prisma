@@ -57,6 +57,43 @@ model Accessory {
   updatedAt       DateTime @updatedAt
 
   owners AccessoryOwner[]
+  reports LocationReport[]
+}
+
+// Persisted location history. Apple only keeps reports for 7 days,
+// so we ingest on every /map and /map/[id] visit and upsert here for
+// long-term retention. Composite-unique on (accessoryId, timestamp)
+// makes re-ingest idempotent — Apple re-returns the same payload
+// across overlapping queries.
+model LocationReport {
+  id          String   @id @default(cuid())
+  accessoryId String
+  accessory   Accessory @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+
+  // Decoded payload — what the UI renders without re-decrypting.
+  lat         Float
+  lng         Float
+  confidence  Int
+  status      Int
+
+  // Timestamp baked into the encrypted payload — "when the finder iPhone
+  // saw the tracker". Comes from data[0..4] big-endian + Apple-epoch offset.
+  timestamp   DateTime
+  // Apple's datePublished from /acsnservice/fetch — slightly after the
+  // payload timestamp (relay latency). Useful for debugging freshness.
+  publishedAt DateTime
+  // Raw base64 payload from Apple. Kept so we can re-decrypt if decoding
+  // ever changes (e.g. firmware status-byte layout shift) without re-fetching.
+  payload     String
+  // Per-report statusCode from Apple. Usually 0.
+  statusCode  Int
+
+  ingestedAt  DateTime @default(now())
+
+  // Idempotent upserts on re-fetch.
+  @@unique([accessoryId, timestamp])
+  // Hot read path: "last N reports for this accessory, newest first."
+  @@index([accessoryId, timestamp(sort: Desc)])
 }
 
 model AccessoryOwner {

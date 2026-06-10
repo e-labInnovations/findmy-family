@@ -28,21 +28,29 @@ export interface ReportLookup {
 
 export interface ReportResult extends DecryptedReport {
   hashedAdvKey: string;
+  /** Raw base64 payload from Apple — kept for persistence/audit. */
+  payload: string;
+  /** Apple's datePublished (ms since epoch) if present. */
+  publishedAt?: number;
+  /** Per-report statusCode from Apple. Usually 0. */
+  statusCode?: number;
 }
 
 /**
- * Query Apple, decrypt all matched reports, return them grouped per accessory.
+ * Query Apple, decrypt all matched reports.
  *
- * `days` is how far back Apple should look. Max ~7 (Apple's retention).
+ * Pass startDateMs/endDateMs explicitly when caller has a narrower window
+ * (e.g. an incremental ingest based on the last persisted timestamp).
+ * Defaults to the full 7-day window (Apple's max retention).
  */
 export async function fetchReports(
   auth: { dsid: string; spToken: string },
   lookups: ReportLookup[],
-  options: { days?: number } = {},
+  options: { days?: number; startDateMs?: number; endDateMs?: number } = {},
 ): Promise<ReportResult[]> {
-  const days = options.days ?? 7;
-  const endDate = Date.now();
-  const startDate = endDate - days * 24 * 60 * 60 * 1000;
+  const endDate = options.endDateMs ?? Date.now();
+  const startDate =
+    options.startDateMs ?? endDate - (options.days ?? 7) * 24 * 60 * 60 * 1000;
 
   const body = {
     search: [
@@ -91,7 +99,13 @@ export async function fetchReports(
     if (!priv) continue;
     try {
       const dec = decryptReport(r.payload, priv);
-      out.push({ ...dec, hashedAdvKey: r.id });
+      out.push({
+        ...dec,
+        hashedAdvKey: r.id,
+        payload: r.payload,
+        publishedAt: r.datePublished,
+        statusCode: r.statusCode,
+      });
     } catch (e) {
       // log + skip; one bad report shouldn't fail the whole query
       console.error(`failed to decrypt report for ${r.id}:`, e);

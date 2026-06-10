@@ -4,12 +4,36 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireAdmin, requireUser } from "@/lib/auth-helpers";
 import { COLORS, DEFAULT_COLOR_ID } from "@/lib/colors";
 import { DEVICE_TYPES } from "@/lib/device-types";
+import { fetchAndIngest } from "@/lib/apple/get-reports";
 
 const COLOR_IDS = COLORS.map((c) => c.id) as [string, ...string[]];
 const TYPE_IDS = DEVICE_TYPES.map((t) => t.id) as [string, ...string[]];
+
+/**
+ * Force a fresh Apple round-trip + ingest for this accessory.
+ * Used by the "Refresh" button on the detail page.
+ *
+ * Auth: any owner OR an admin. Members can refresh their own trackers.
+ */
+export async function refreshAccessory(formData: FormData): Promise<void> {
+  const me = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Missing accessory id.");
+
+  // Ownership check: admin or one of the owners.
+  if (me.role !== "ADMIN") {
+    const owned = await db.accessoryOwner.findUnique({
+      where: { accessoryId_userId: { accessoryId: id, userId: me.id } },
+    });
+    if (!owned) throw new Error("Not allowed.");
+  }
+
+  await fetchAndIngest([id], { refresh: true });
+  revalidatePath(`/map/${id}`);
+}
 
 export async function removeAccessory(formData: FormData): Promise<void> {
   await requireAdmin();

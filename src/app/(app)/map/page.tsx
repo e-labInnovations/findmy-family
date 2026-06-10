@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth-helpers";
 import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
+import { fetchAndIngest } from "@/lib/apple/get-reports";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,34 @@ export default async function MapPage() {
       },
     },
   });
+
+  // Bulk-ingest fresh reports for everything on screen in a single Apple
+  // call, then index the latest report per accessory for the list row.
+  // Failures (Apple down, tokens expired) shouldn't break the list — we
+  // just fall back to whatever's already persisted.
+  let latestByAccessory = new Map<
+    string,
+    { lat: number; lng: number; timestamp: number }
+  >();
+  try {
+    const reports = await fetchAndIngest(accessories.map((a) => a.id));
+    if (reports) {
+      latestByAccessory = new Map(
+        reports
+          .filter((r) => r.latest !== null)
+          .map((r) => [
+            r.accessoryId,
+            {
+              lat: r.latest!.lat,
+              lng: r.latest!.lng,
+              timestamp: r.latest!.timestamp,
+            },
+          ]),
+      );
+    }
+  } catch (e) {
+    console.error("map: bulk ingest failed —", e);
+  }
 
   return (
     <>
@@ -97,6 +126,14 @@ export default async function MapPage() {
                           </span>
                         </>
                       )}
+                      {latestByAccessory.has(a.id) && (
+                        <>
+                          {" · "}
+                          <span style={{ color: "var(--accent)" }}>
+                            {relativeAgo(latestByAccessory.get(a.id)!.timestamp)}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <svg
@@ -122,4 +159,15 @@ export default async function MapPage() {
       </div>
     </>
   );
+}
+
+function relativeAgo(secondsSinceEpoch: number): string {
+  const sec = Math.floor(Date.now() / 1000 - secondsSinceEpoch);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
 }
