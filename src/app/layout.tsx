@@ -13,7 +13,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-theme="dark" className="h-full">
-      <body className="min-h-full">{children}</body>
+      {/* suppressHydrationWarning silences the noise from browser
+          extensions (Grammarly, etc.) that mutate <body> before React
+          hydrates. Doesn't suppress real hydration bugs in our own code. */}
+      <body className="min-h-full" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
