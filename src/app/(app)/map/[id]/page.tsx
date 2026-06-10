@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth-helpers";
 import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
+import { bleMacFromAdvKey } from "@/lib/ble-mac";
 import { removeAccessory } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -164,6 +165,13 @@ export default async function AccessoryDetailPage({
           ))}
         </div>
 
+        {acc.advertisementKey && (
+          <Detail
+            label="BLE MAC"
+            value={bleMacFromAdvKey(acc.advertisementKey) ?? "—"}
+            mono
+          />
+        )}
         <Detail
           label="Hashed adv key"
           value={acc.hashedAdvKey}

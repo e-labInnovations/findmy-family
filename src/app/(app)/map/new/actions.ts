@@ -51,7 +51,7 @@ export async function addAccessory(
   if (!parseRes.ok) {
     return { ok: false, message: parseRes.error };
   }
-  const { privateKey, hashedAdvKey } = parseRes.keys;
+  const { privateKey, advertisementKey, hashedAdvKey } = parseRes.keys;
 
   // Build the full owner set: union of `owners` plus the primary,
   // dedup, then mark the primary.
@@ -81,6 +81,7 @@ export async function addAccessory(
       type,
       color,
       privateKeyEnc: encryptAtRest(privateKey),
+      advertisementKey: advertisementKey.toString("base64"),
       hashedAdvKey,
       owners: {
         create: ownerIds.map((userId) => ({

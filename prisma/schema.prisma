@@ -47,6 +47,11 @@ model Accessory {
   // Apple FindMy keys. The private key is the secret that decrypts reports;
   // hashedAdvKey = SHA256(P.x) is the lookup id we hand to Apple.
   privateKeyEnc   String   // base64 of (iv || ct || tag) encrypted with master key
+  // 28-byte compressed P-224 public key X coord, base64. Not secret —
+  // it's broadcast on every BLE advert. Stored so we can derive the
+  // BLE MAC (= advertisementKey[0..5], byte 0 |= 0xC0) for display
+  // without re-running P-224 scalar mult on every page render.
+  advertisementKey String?  @db.VarChar(48)
   hashedAdvKey    String   @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
