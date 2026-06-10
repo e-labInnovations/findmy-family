@@ -3,6 +3,9 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { LoginForm } from "./login-form";
 
+// Reads DB state + auth() each request — never prerender statically.
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   // If no users exist yet, send the user through /setup so they
   // can become the first admin.

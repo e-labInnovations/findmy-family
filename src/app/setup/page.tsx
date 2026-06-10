@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { SetupForm } from "./setup-form";
 
+export const dynamic = "force-dynamic";
+
 /**
  * First-run only. If any user already exists, the door is closed
  * and we bounce to login.

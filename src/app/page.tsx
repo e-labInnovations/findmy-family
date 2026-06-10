@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Root router. Three states:
  *   - no users yet      → /setup (first run, becomes admin)

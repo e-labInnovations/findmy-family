@@ -281,7 +281,250 @@ body {
   color: var(--text);
   cursor: pointer;
   border: none;
+  transition: background 0.15s, transform 0.1s;
 }
 .icon-btn:hover {
+  background: var(--surface-3);
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+.icon-btn.accent {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.icon-btn.accent:hover {
+  filter: brightness(1.08);
+  background: var(--accent);
+}
+
+.btn.danger {
+  background: transparent;
+  color: var(--danger);
+}
+.btn.danger:hover {
+  background: oklch(0.64 0.2 22 / 0.12);
+  filter: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  letter-spacing: 0.02em;
+}
+
+/* ---------- page head (used by /people, /map, /settings) ---------- */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 18px 14px;
+}
+.page-h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.page-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.screen-body {
+  padding: 0 14px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.empty-min {
+  padding: 16px;
+  color: var(--text-faint);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---------- avatars ---------- */
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 650;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.avatar.xl {
+  width: 96px;
+  height: 96px;
+  font-size: 30px;
+}
+
+/* ---------- people list ---------- */
+.people-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.person-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.14s, transform 0.1s;
+  text-decoration: none;
+}
+.person-card:hover {
+  background: var(--surface-2);
+}
+.person-card:active {
+  transform: scale(0.995);
+}
+.person-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.person-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.person-top strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.drow-chev {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* ---------- forms ---------- */
+.field-label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 14px 4px 6px;
+}
+.text-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 16px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.text-field:focus,
+.text-field:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.text-field.with-trail {
+  padding-right: 6px;
+}
+.text-field input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+}
+.color-opt {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  position: relative;
+  transition: transform 0.1s;
+}
+.color-opt:active {
+  transform: scale(0.92);
+}
+.color-opt.sel::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+}
+
+.field-help {
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 14px 4px 0;
+}
+
+.edit-preview {
+  display: grid;
+  place-items: center;
+  padding: 20px 0 8px;
+}
+
+/* ---------- top bar (back + title + action) ---------- */
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.top-bar .spacer {
+  flex: 1;
+}
+.top-bar h1 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+.top-bar a.back {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.top-bar a.back:hover {
   background: var(--surface-3);
 }
