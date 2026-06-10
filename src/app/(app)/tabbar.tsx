@@ -76,35 +76,15 @@ const TABS = [
 
 export function TabBar() {
   const pathname = usePathname();
-
   return (
-    <nav
-      style={{
-        display: "flex",
-        borderTop: "1px solid var(--border-soft)",
-        background: "var(--surface)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
+    <nav className="tabbar">
       {TABS.map((t) => {
         const active = t.match.test(pathname);
         return (
           <Link
             key={t.href}
             href={t.href}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 3,
-              padding: "8px 0 10px",
-              fontSize: 11,
-              fontWeight: 600,
-              textDecoration: "none",
-              color: active ? "var(--accent)" : "var(--text-faint)",
-              transition: "color 0.12s",
-            }}
+            className={"tab" + (active ? " active" : "")}
           >
             {t.icon}
             <span>{t.label}</span>

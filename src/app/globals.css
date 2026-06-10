@@ -528,3 +528,191 @@ body {
 .top-bar a.back:hover {
   background: var(--surface-3);
 }
+
+/* ============================================================
+   Responsive shell: mobile = bottom tabs, desktop = left rail
+   Breakpoint matches the design (900px).
+   ============================================================ */
+.app-shell {
+  min-height: 100dvh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 72px; /* leave room for bottom tabbar */
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-decoration: none;
+  transition: color 0.12s, background 0.12s;
+  border-radius: 12px;
+  margin: 4px 4px;
+}
+.tab:hover {
+  background: var(--surface-2);
+}
+.tab.active {
+  color: var(--accent);
+}
+
+@media (min-width: 900px) {
+  .app-shell {
+    flex-direction: row;
+  }
+  .app-main {
+    padding-bottom: 24px;
+    padding-left: 0;
+    margin-left: 84px; /* leave room for left rail */
+  }
+  .app-main > * {
+    max-width: 720px;
+  }
+  .tabbar {
+    position: fixed;
+    flex-direction: column;
+    width: 84px;
+    height: 100%;
+    top: 0;
+    bottom: 0;
+    right: auto;
+    border-top: none;
+    border-right: 1px solid var(--border-soft);
+    padding-top: 18px;
+    padding-bottom: 0;
+    gap: 4px;
+  }
+  .tab {
+    flex: 0 0 auto;
+    padding: 11px 3px;
+    margin: 0 6px;
+    border-radius: 14px;
+    gap: 5px;
+    font-size: 10px;
+  }
+  .tab.active {
+    background: var(--accent-soft);
+  }
+}
+
+/* ---------- Settings rows (used in /settings) ---------- */
+.set-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  margin: 0 14px;
+}
+.set-profile .col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.set-section-label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 22px 18px 6px;
+}
+
+.set-group {
+  display: flex;
+  flex-direction: column;
+  margin: 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.set-row + .set-row {
+  border-top: 1px solid var(--border-soft);
+}
+.set-row:hover {
+  background: var(--surface-2);
+}
+.set-row:disabled {
+  cursor: default;
+}
+.set-row:disabled:hover {
+  background: transparent;
+}
+.set-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--text);
+  flex-shrink: 0;
+}
+.set-row .col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.set-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.faint {
+  color: var(--text-faint);
+}
+
+.btn.signout {
+  background: var(--surface-2);
+  color: var(--danger);
+  border: 1px solid var(--border-soft);
+}
+.btn.signout:hover {
+  background: var(--surface-3);
+  filter: none;
+}
