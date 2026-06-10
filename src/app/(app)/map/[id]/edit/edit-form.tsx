@@ -1,0 +1,238 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { updateAccessory, type UpdateAccessoryState } from "../actions";
+import { COLORS, DEFAULT_COLOR_ID, colorOklch } from "@/lib/colors";
+import { DEVICE_TYPES, DeviceIcon } from "@/lib/device-types";
+
+interface MemberLite {
+  id: string;
+  name: string;
+  color: string;
+  initials: string;
+  title: string | null;
+}
+
+interface AccessoryLite {
+  id: string;
+  name: string;
+  type: string;
+  color: string;
+  ownerIds: string[];
+  primaryOwnerId: string;
+}
+
+const initialState: UpdateAccessoryState = { ok: false };
+
+export function EditAccessoryForm({
+  accessory,
+  members,
+}: {
+  accessory: AccessoryLite;
+  members: MemberLite[];
+}) {
+  const [state, formAction, pending] = useActionState(
+    updateAccessory,
+    initialState,
+  );
+  const [name, setName] = useState(accessory.name);
+  const [type, setType] = useState(accessory.type);
+  const [color, setColor] = useState(accessory.color || DEFAULT_COLOR_ID);
+  const [ownerIds, setOwnerIds] = useState<string[]>(accessory.ownerIds);
+  const [primary, setPrimary] = useState<string>(accessory.primaryOwnerId);
+
+  function toggleOwner(id: string) {
+    setOwnerIds((prev) => {
+      const has = prev.includes(id);
+      const next = has ? prev.filter((x) => x !== id) : [...prev, id];
+      if (has && primary === id) setPrimary(next[0] ?? "");
+      if (!has && !primary) setPrimary(id);
+      return next;
+    });
+  }
+
+  const canSave = name.trim() && ownerIds.length && primary;
+
+  return (
+    <form action={formAction} style={{ display: "flex", flexDirection: "column" }}>
+      <input type="hidden" name="id" value={accessory.id} />
+
+      <div
+        className="edit-preview"
+        style={{ flexDirection: "column", display: "flex", alignItems: "center" }}
+      >
+        <span
+          className="drow-ico"
+          style={{
+            background: colorOklch(color),
+            width: 64,
+            height: 64,
+            borderRadius: 18,
+          }}
+        >
+          <DeviceIcon type={type} size={30} />
+        </span>
+        <div className="edit-prev-name">{name.trim() || "Accessory name"}</div>
+      </div>
+
+      <label className="field-label" htmlFor="name">Name</label>
+      <input
+        id="name"
+        name="name"
+        className="text-field"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        required
+      />
+
+      <label className="field-label">Icon</label>
+      <input type="hidden" name="type" value={type} />
+      <div className="icon-grid">
+        {DEVICE_TYPES.map((t) => {
+          const sel = t.id === type;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={"icon-opt" + (sel ? " sel" : "")}
+              style={
+                sel
+                  ? { background: colorOklch(color), borderColor: "transparent", color: "#fff" }
+                  : undefined
+              }
+              onClick={() => setType(t.id)}
+              aria-pressed={sel}
+            >
+              <DeviceIcon type={t.id} size={22} />
+              <span className="icon-opt-label">{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <label className="field-label">Color</label>
+      <input type="hidden" name="color" value={color} />
+      <div className="color-grid">
+        {COLORS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={"color-opt" + (color === c.id ? " sel" : "")}
+            style={{ background: c.oklch }}
+            onClick={() => setColor(c.id)}
+            title={c.label}
+            aria-label={c.label}
+            aria-pressed={color === c.id}
+          >
+            {color === c.id && (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <label className="field-label">Who can locate this?</label>
+      <input type="hidden" name="primaryOwnerId" value={primary} />
+      <div className="owner-pick">
+        {members.map((m) => {
+          const on = ownerIds.includes(m.id);
+          const isP = primary === m.id;
+          return (
+            <div key={m.id} className={"owner-pick-row" + (on ? " on" : "")}>
+              <button
+                type="button"
+                className="opick-main"
+                onClick={() => toggleOwner(m.id)}
+              >
+                <span
+                  className="avatar sm"
+                  style={{ background: colorOklch(m.color) }}
+                >
+                  {m.initials}
+                </span>
+                <div className="col">
+                  <strong>{m.name}</strong>
+                  {m.title && (
+                    <span className="faint" style={{ fontSize: 12 }}>
+                      {m.title}
+                    </span>
+                  )}
+                </div>
+                <span className={"check-box" + (on ? " on" : "")}>
+                  {on && (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+              {on && (
+                <button
+                  type="button"
+                  className={"primary-toggle" + (isP ? " on" : "")}
+                  onClick={() => setPrimary(m.id)}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill={isP ? "currentColor" : "none"}
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                  {isP ? "Primary" : "Set primary"}
+                </button>
+              )}
+              {on && <input type="hidden" name="owners" value={m.id} />}
+            </div>
+          );
+        })}
+      </div>
+
+      {state.message && (
+        <div className="auth-err" style={{ marginTop: 12 }}>
+          {state.message}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        className="btn"
+        disabled={pending || !canSave}
+        style={{ marginTop: 20 }}
+      >
+        {pending ? "Saving…" : "Save changes"}
+      </button>
+    </form>
+  );
+}
