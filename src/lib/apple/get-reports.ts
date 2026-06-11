@@ -15,6 +15,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { decryptAtRest } from "@/lib/crypto-at-rest";
+import { reverseGeocode } from "@/lib/geocode";
 import { fetchReports, type ReportResult } from "./reports";
 
 export interface ReportsForAccessory {
@@ -34,16 +35,30 @@ export interface HistoricalReport {
   timestamp: number;
   /** Milliseconds since Unix epoch — when Apple recorded the relay. */
   publishedAt: number;
+  /** Reverse-geocoded human place (cached). Null if uncached / Nominatim down. */
+  place?: string | null;
 }
 
-/** Convenience wrapper for single-accessory pages. */
+/**
+ * Convenience wrapper for single-accessory pages.
+ * Actively reverse-geocodes the latest report (detail pages can afford
+ * the Nominatim round-trip — the bulk list path can't).
+ */
 export async function getReportsForAccessory(
   accessoryId: string,
   options: { days?: number; refresh?: boolean } = {},
 ): Promise<ReportsForAccessory | null> {
   const all = await fetchAndIngest([accessoryId], options);
   if (all === null) return null;
-  return all[0] ?? { accessoryId, latest: null, all: [] };
+  const result = all[0] ?? { accessoryId, latest: null, all: [] };
+
+  // Live-geocode the latest pin so the detail-page user gets a name on
+  // first visit. Older history points stay cache-only (rate limit).
+  if (result.latest) {
+    const place = await reverseGeocode(result.latest.lat, result.latest.lng);
+    result.latest = { ...result.latest, place };
+  }
+  return result;
 }
 
 /** Bulk version used by /map (single Apple call for the whole list). */
@@ -104,9 +119,34 @@ export async function fetchAndIngest(
     orderBy: { timestamp: "desc" },
   });
 
+  // Cache-only enrichment for the latest pin per accessory. The list
+  // view should never pay for a Nominatim round-trip — only what's
+  // already in GeocodeCache surfaces here. Detail pages do the live call.
+  const latestKeys = new Map<string, { latRound: number; lngRound: number }>();
+  for (const r of rows) {
+    if (latestKeys.has(r.accessoryId)) continue; // rows are sorted desc, first wins
+    latestKeys.set(r.accessoryId, {
+      latRound: Math.round(r.lat * 10_000) / 10_000,
+      lngRound: Math.round(r.lng * 10_000) / 10_000,
+    });
+  }
+  const cachedPlaces = await db.geocodeCache.findMany({
+    where: {
+      OR: Array.from(latestKeys.values()).map((k) => ({
+        latRound: k.latRound,
+        lngRound: k.lngRound,
+      })),
+    },
+  });
+  const placeByKey = new Map(
+    cachedPlaces.map((c) => [`${c.latRound},${c.lngRound}`, c.place]),
+  );
+
   const grouped = new Map<string, HistoricalReport[]>();
   for (const r of rows) {
     const list = grouped.get(r.accessoryId) ?? [];
+    const latRound = Math.round(r.lat * 10_000) / 10_000;
+    const lngRound = Math.round(r.lng * 10_000) / 10_000;
     list.push({
       lat: r.lat,
       lng: r.lng,
@@ -114,6 +154,7 @@ export async function fetchAndIngest(
       status: r.status,
       timestamp: Math.floor(r.timestamp.getTime() / 1000),
       publishedAt: r.publishedAt.getTime(),
+      place: placeByKey.get(`${latRound},${lngRound}`) ?? null,
     });
     grouped.set(r.accessoryId, list);
   }

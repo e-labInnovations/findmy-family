@@ -47,6 +47,7 @@ export interface DetailReport {
   timestamp: number;
   confidence: number;
   status: number;
+  place?: string | null;
 }
 
 export type ReportsState =
@@ -305,14 +306,26 @@ function DetailBody({
         <div className="dd-loc">
           <MapPinIcon size={17} aria-hidden />
           <div className="col">
-            <strong>
-              {reports.latest.lat.toFixed(6)},{" "}
-              {reports.latest.lng.toFixed(6)}
-            </strong>
-            <span className="faint mono" style={{ fontSize: 12 }}>
-              confidence {reports.latest.confidence} · status 0x
-              {reports.latest.status.toString(16).padStart(2, "0")}
-            </span>
+            {reports.latest.place ? (
+              <>
+                <strong>{reports.latest.place}</strong>
+                <span className="faint mono" style={{ fontSize: 12 }}>
+                  {reports.latest.lat.toFixed(5)},{" "}
+                  {reports.latest.lng.toFixed(5)}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>
+                  {reports.latest.lat.toFixed(6)},{" "}
+                  {reports.latest.lng.toFixed(6)}
+                </strong>
+                <span className="faint mono" style={{ fontSize: 12 }}>
+                  confidence {reports.latest.confidence} · status 0x
+                  {reports.latest.status.toString(16).padStart(2, "0")}
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -560,6 +573,11 @@ function HistorySheet({
                     <strong>{shortTime(h.timestamp)}</strong>
                     {i === 0 && <span className="badge">Now</span>}
                   </div>
+                  {h.place && (
+                    <span style={{ fontSize: 13, color: "var(--text)" }}>
+                      {h.place}
+                    </span>
+                  )}
                   <span className="faint" style={{ fontSize: 13 }}>
                     {relativeAgo(h.timestamp)}
                   </span>

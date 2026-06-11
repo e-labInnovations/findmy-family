@@ -59,6 +59,7 @@ export default async function AccessoryDetailPage({
           timestamp: r.latest.timestamp,
           confidence: r.latest.confidence,
           status: r.latest.status,
+          place: r.latest.place ?? null,
         },
         trail: r.all.slice(0, TRAIL_MAX_POINTS).map((p) => ({
           lat: p.lat,
@@ -66,6 +67,7 @@ export default async function AccessoryDetailPage({
           timestamp: p.timestamp,
           confidence: p.confidence,
           status: p.status,
+          place: p.place ?? null,
         })),
       };
     }
