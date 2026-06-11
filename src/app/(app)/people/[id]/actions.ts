@@ -2,8 +2,69 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { COLORS, DEFAULT_COLOR_ID } from "@/lib/colors";
+import { initialsFromName } from "@/lib/initials";
+
+const COLOR_IDS = COLORS.map((c) => c.id) as [string, ...string[]];
+
+const UpdateMemberSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1, "Enter a name."),
+  title: z.string().trim().optional(),
+  color: z.enum(COLOR_IDS).default(DEFAULT_COLOR_ID),
+  // Blank = leave existing password unchanged.
+  password: z.string().optional(),
+});
+
+export interface UpdateMemberState {
+  ok: boolean;
+  message?: string;
+}
+
+export async function updateMember(
+  _prev: UpdateMemberState | undefined,
+  formData: FormData,
+): Promise<UpdateMemberState> {
+  await requireAdmin();
+
+  const parsed = UpdateMemberSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    title: formData.get("title"),
+    color: formData.get("color") ?? DEFAULT_COLOR_ID,
+    password: formData.get("password"),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { id, name, title, color, password } = parsed.data;
+
+  const existing = await db.user.findUnique({ where: { id } });
+  if (!existing) return { ok: false, message: "Member not found." };
+
+  const data: Parameters<typeof db.user.update>[0]["data"] = {
+    name,
+    title: title || null,
+    color,
+    initials: initialsFromName(name) || existing.initials,
+  };
+  if (password && password.length > 0) {
+    if (password.length < 8) {
+      return { ok: false, message: "Password must be at least 8 characters." };
+    }
+    data.passwordHash = await bcrypt.hash(password, 12);
+  }
+
+  await db.user.update({ where: { id }, data });
+
+  revalidatePath("/people");
+  revalidatePath(`/people/${id}`);
+  redirect(`/people/${id}`);
+}
 
 export async function removeMember(formData: FormData): Promise<void> {
   const admin = await requireAdmin();

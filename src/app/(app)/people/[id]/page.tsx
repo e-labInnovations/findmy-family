@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Edit3 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { colorOklch } from "@/lib/colors";
+import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
 import { removeMember } from "./actions";
 
 export default async function MemberDetailPage({
@@ -48,6 +50,14 @@ export default async function MemberDetailPage({
         </Link>
         <h1>Member</h1>
         <span className="spacer" />
+        <Link
+          href={`/people/${member.id}/edit`}
+          className="icon-btn"
+          title="Edit"
+          aria-label="Edit"
+        >
+          <Edit3 size={18} aria-hidden />
+        </Link>
       </div>
 
       <div className="screen-body" style={{ gap: 14 }}>
@@ -100,8 +110,9 @@ export default async function MemberDetailPage({
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {owned.map((o) => (
-              <div
+              <Link
                 key={o.accessory.id}
+                href={`/map/${o.accessory.id}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -110,24 +121,32 @@ export default async function MemberDetailPage({
                   background: "var(--surface)",
                   border: "1px solid var(--border-soft)",
                   borderRadius: "var(--radius-md)",
+                  color: "inherit",
+                  textDecoration: "none",
                 }}
               >
                 <span
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 11,
                     background: colorOklch(o.accessory.color),
+                    color: "#fff",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
                   }}
-                />
-                <div style={{ flex: 1 }}>
+                >
+                  <DeviceIcon type={o.accessory.type} size={18} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <strong style={{ fontSize: 15 }}>{o.accessory.name}</strong>
                   <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                    {o.accessory.type}
+                    {deviceTypeLabel(o.accessory.type)}
                   </div>
                 </div>
                 {o.isPrimary && <span className="badge">Primary</span>}
-              </div>
+              </Link>
             ))}
           </div>
         </div>
