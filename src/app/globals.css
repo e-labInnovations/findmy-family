@@ -31,6 +31,10 @@
   --success: oklch(0.7 0.16 152);
   --warn: oklch(0.78 0.15 75);
   --scrim: rgba(0, 0, 0, 0.55);
+  /* OSM tiles are designed for light backgrounds. In dark mode we invert
+     and re-hue them so labels stay readable against a dark canvas. */
+  --map-filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)
+    saturate(0.85);
   color-scheme: dark;
 }
 
@@ -57,6 +61,7 @@
   --success: oklch(0.55 0.15 152);
   --warn: oklch(0.7 0.15 75);
   --scrim: rgba(20, 24, 33, 0.32);
+  --map-filter: none;
   color-scheme: light;
 }
 
@@ -458,12 +463,30 @@ body {
   font-size: 16px;
 }
 
+/* Two-row horizontal-scroll color picker. grid-auto-flow: column packs
+   items down then across, so the swatches lay out as a 2×N strip that
+   scrolls sideways. Edge mask hints "more this way". */
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 8px;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 44px);
+  grid-auto-columns: 44px;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
 }
+.color-grid::-webkit-scrollbar { display: none; }
 .color-opt {
+  scroll-snap-align: start;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -714,12 +737,28 @@ body {
   color: var(--text-dim);
 }
 
+/* Two-row horizontal-scroll device-type picker — matches the color picker. */
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-columns: 78px;
   gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
 }
+.icon-grid::-webkit-scrollbar { display: none; }
 .icon-opt {
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -952,4 +991,611 @@ textarea.text-field {
 .btn.signout:hover {
   background: var(--surface-3);
   filter: none;
+}
+
+/* ============ MAP / DETAIL chrome ============
+   Ported from the design bundle (FindMy Family). Tokens already defined
+   above are reused — only structural classes are added here. */
+
+/* Tiny layout utilities. !important guards against Tailwind v4's
+   utility layer occasionally outranking these — we saw .col not
+   stack in /map's title pill and /map/[id]'s location card. */
+.col { display: flex !important; flex-direction: column !important; }
+.row { display: flex; align-items: center; gap: 12px; }
+.spacer { flex: 1; }
+.muted { color: var(--text-dim); }
+.mono { font-family: var(--font-mono); }
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Battery indicator in detail/dd-status + list rows. */
+.batt {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.batt.full { color: var(--success); }
+.batt.med { color: var(--success); }
+.batt.low { color: var(--warn); }
+.batt.empty { color: var(--danger); }
+
+/* Full-bleed map screens opt out of .app-main's content constraints
+   (padding, overflow:auto, max-width: 720px on desktop). */
+.map-screen {
+  position: absolute;
+  inset: 0;
+}
+.app-main:has(.map-screen) {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+.app-main:has(.map-screen) > .map-screen {
+  max-width: none;
+}
+@media (max-width: 899px) {
+  /* Sit above the fixed bottom tabbar. */
+  .map-screen { bottom: 72px; }
+}
+
+.map-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.main-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.main-overlay > * { pointer-events: auto; }
+.screen-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: var(--bg);
+}
+
+/* Leaflet — strip default zoom control, theme the attribution */
+.leaflet-container {
+  background: var(--bg) !important;
+  font-family: var(--font-sans) !important;
+  width: 100%;
+  height: 100%;
+}
+/* Re-tint OSM tiles per theme. Filter is the cheap path — no swap to a
+   dark tile provider needed, which would require an API key. */
+.leaflet-tile-pane { filter: var(--map-filter); }
+.leaflet-control-zoom { display: none !important; }
+.leaflet-control-attribution {
+  background: var(--surface) !important;
+  color: var(--text-faint) !important;
+  font-size: 10px !important;
+  border-radius: 8px 0 0 0;
+  padding: 2px 7px !important;
+}
+.leaflet-control-attribution a { color: var(--text-dim) !important; }
+
+/* Glass + icon variants on icon-btn */
+.glass {
+  background: color-mix(in oklch, var(--surface) 78%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.icon-btn.spin svg { animation: ovrl-spin 0.9s linear infinite; }
+@keyframes ovrl-spin { to { transform: rotate(360deg); } }
+
+/* Top floating bar on the map */
+.map-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: max(14px, env(safe-area-inset-top)) 14px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 5;
+}
+.map-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface) 80%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.mt-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+}
+.map-top-btns {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* Bottom sheet (mobile <900px) / left rail (≥900px) */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  background: var(--surface);
+  border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+  border-top: 1px solid var(--border-soft);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transition: height 0.36s var(--ease, cubic-bezier(0.32, 0.72, 0, 1)),
+              transform 0.36s var(--ease, cubic-bezier(0.32, 0.72, 0, 1));
+  overflow: hidden;
+}
+.sheet-peek { height: 168px; }
+.sheet-half { height: 52%; }
+.sheet-full { height: calc(100% - 88px); }
+.sheet-hidden { display: none !important; }
+.sheet-grip {
+  padding: 10px 0 4px;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.grip-bar {
+  width: 38px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+.sheet-head {
+  display: flex;
+  gap: 10px;
+  padding: 6px 16px 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.search input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+}
+.search input::placeholder { color: var(--text-faint); }
+.search-clear {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text-dim);
+}
+.sheet-body {
+  flex: 1;
+  padding: 0 12px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sheet-body > .sheet-section-label { margin: 2px 0 0; }
+.sheet-section-label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 6px 8px;
+}
+
+/* Status dot used on .drow + detail */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.status-dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 22%, transparent);
+}
+.status-dot.warn { background: var(--warn); }
+.status-dot.neutral { background: var(--text-faint); }
+.status-dot.off { background: var(--text-faint); opacity: 0.5; }
+.dot-sep { opacity: 0.5; }
+.drow-top { display: flex; align-items: center; gap: 7px; }
+.drow-end { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Custom pin marker */
+.pin-wrap, .me-wrap { background: none !important; border: none !important; }
+
+/* "You are here" — pulsing blue dot for the user's own device. */
+.me-pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+.me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+.me-halo {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .me-halo {
+    animation: me-halo 2.4s var(--ease, cubic-bezier(0.32, 0.72, 0, 1)) infinite;
+  }
+}
+@keyframes me-halo {
+  0% { transform: scale(1); opacity: 0.35; }
+  70% { opacity: 0; }
+  100% { transform: scale(4.2); opacity: 0; }
+}
+.pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  transform-origin: center bottom;
+  transition: transform 0.18s var(--ease, cubic-bezier(0.32, 0.72, 0, 1));
+}
+.pin-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border: 2.5px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.pin-dot svg { width: 21px; height: 21px; }
+.pin-tail {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-right: 2.5px solid rgba(255, 255, 255, 0.92);
+  border-bottom: 2.5px solid rgba(255, 255, 255, 0.92);
+  border-bottom-right-radius: 3px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.pin.active { transform: scale(1.14); }
+.pin .ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid var(--pin-color, var(--accent));
+  opacity: 0;
+}
+.pin.active .ring {
+  animation: pin-pulse 2s var(--ease, cubic-bezier(0.32, 0.72, 0, 1)) infinite;
+}
+@keyframes pin-pulse {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.avatar-pin {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-weight: 650;
+  font-size: 14px;
+  background: var(--pin-color);
+}
+
+/* Detail bottom-sheet shown on /map/[id] */
+.detail-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  background: var(--surface);
+  border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 88dvh;
+  transition: height 0.34s var(--ease, cubic-bezier(0.32, 0.72, 0, 1));
+}
+.detail-peek { height: 128px; }
+.detail-mid  { height: 52dvh; }
+.detail-full { height: 88dvh; }
+
+.dd-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 18px 26px;
+  overflow-y: auto;
+}
+.dd-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 4px 0 14px;
+}
+.dd-ico {
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30);
+}
+.dd-ico.sm { width: 38px; height: 38px; border-radius: 12px; }
+.dd-headtext { flex: 1; min-width: 0; }
+.dd-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.dd-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+.dd-loc {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  margin-bottom: 14px;
+  color: var(--accent);
+}
+.dd-loc .col { color: var(--text); }
+.dd-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.dd-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 13px 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.14s, transform 0.1s;
+  text-decoration: none;
+}
+.dd-action:hover { background: var(--surface-3); }
+.dd-action:active { transform: scale(0.95); }
+.dd-action-ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.dd-action.accent .dd-action-ico {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.dd-card {
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 4px 14px;
+  margin-bottom: 6px;
+}
+.dd-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 14.5px;
+}
+.dd-stat:last-child { border-bottom: none; }
+.dd-stat > .muted:first-child { flex: 1; }
+.dd-section-label {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 6px 8px;
+}
+
+.owner-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.owner-row:last-child { border-bottom: none; }
+.owner-row .col { flex: 1; min-width: 0; }
+
+/* History timeline */
+.hist-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 18px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.hist-wrap { padding: 8px 4px; }
+.hist-item {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.hist-item:hover { background: var(--surface-2); }
+.hist-item.active { background: var(--accent-soft); }
+.hist-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 14px;
+}
+.hist-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2.5px solid;
+  flex-shrink: 0;
+}
+.hist-line {
+  flex: 1;
+  width: 2px;
+  background: var(--border);
+  margin: 3px 0;
+  min-height: 20px;
+}
+.hist-body {
+  padding-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.hist-top { display: flex; align-items: center; gap: 8px; }
+.hist-top strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Day-range chip row above the timeline list. */
+.day-chips {
+  display: flex;
+  gap: 6px;
+  padding: 4px 12px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.day-chips::-webkit-scrollbar { display: none; }
+.day-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.day-chip:hover { background: var(--surface-3); color: var(--text); }
+.day-chip.on {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+
+/* Transient confirmation toast. */
+.toast {
+  position: fixed;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 100;
+  animation: toast-in 0.2s ease-out;
+}
+@keyframes toast-in {
+  from { transform: translate(-50%, 12px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+@media (min-width: 900px) {
+  .toast { bottom: 24px; left: calc(84px + 420px / 2); transform: translateX(0); }
+  @keyframes toast-in {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+}
+
+/* Desktop (≥900px): map sheet becomes a left side panel.
+   Coordinates are relative to .map-screen (already shifted right by
+   the 84px tab-rail margin on .app-main), so left: 0 here. */
+@media (min-width: 900px) {
+  .sheet,
+  .detail-sheet {
+    top: 0;
+    bottom: 0;
+    right: auto;
+    left: 0;
+    width: 420px;
+    height: 100% !important;
+    border-radius: 0 var(--radius-xl, 28px) var(--radius-xl, 28px) 0;
+  }
+  .sheet-grip { display: none; }
+  .map-top { left: 432px; }
 }
