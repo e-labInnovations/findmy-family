@@ -16,13 +16,26 @@ export interface EditableMember {
   role: "ADMIN" | "MEMBER";
 }
 
-export function EditMemberForm({ member }: { member: EditableMember }) {
+export function EditMemberForm({
+  member,
+  canEditName = true,
+}: {
+  member: EditableMember;
+  /** When false, the name field is hidden — server keeps the existing
+   *  value. Used for non-admin self-edit. */
+  canEditName?: boolean;
+}) {
   const [state, formAction, pending] = useActionState(updateMember, initialState);
   const [name, setName] = useState(member.name);
   const [color, setColor] = useState(member.color);
   const [showPw, setShowPw] = useState(false);
 
-  const initials = useMemo(() => initialsFromName(name) || member.name.slice(0, 2).toUpperCase(), [name, member.name]);
+  const initials = useMemo(
+    () =>
+      initialsFromName(canEditName ? name : member.name) ||
+      member.name.slice(0, 2).toUpperCase(),
+    [name, member.name, canEditName],
+  );
 
   return (
     <form action={formAction} style={{ display: "flex", flexDirection: "column" }}>
@@ -32,20 +45,27 @@ export function EditMemberForm({ member }: { member: EditableMember }) {
         <span className="avatar xl" style={{ background: colorOklch(color) }}>
           {initials}
         </span>
+        {!canEditName && (
+          <strong style={{ fontSize: 18, marginTop: 6 }}>{member.name}</strong>
+        )}
         <span className="faint mono" style={{ fontSize: 12 }}>{member.email}</span>
         {member.role === "ADMIN" && <span className="badge">Family Organizer</span>}
       </div>
 
-      <label className="field-label" htmlFor="name">Full name</label>
-      <input
-        id="name"
-        name="name"
-        className="text-field"
-        autoComplete="off"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-      />
+      {canEditName && (
+        <>
+          <label className="field-label" htmlFor="name">Full name</label>
+          <input
+            id="name"
+            name="name"
+            className="text-field"
+            autoComplete="off"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </>
+      )}
 
       <label className="field-label" htmlFor="title">Role / description</label>
       <input

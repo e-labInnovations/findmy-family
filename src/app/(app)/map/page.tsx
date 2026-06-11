@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth-helpers";
 import { fetchAndIngest } from "@/lib/apple/get-reports";
+import { getFamilyName } from "@/lib/family-info";
 import MapShell, { type AccessoryListItem } from "./map-shell";
 import type { MapPin } from "./map-view";
 import { refreshAllVisible } from "./actions";
@@ -29,6 +30,8 @@ export default async function MapPage() {
   const appleAccountExpired = !!(
     appleAccount && appleAccount.expiresAt.getTime() < Date.now()
   );
+
+  const familyName = await getFamilyName();
 
   const accessories = await db.accessory.findMany({
     where: isAdmin ? undefined : { owners: { some: { userId: me.id } } },
@@ -110,7 +113,7 @@ export default async function MapPage() {
       pins={pins}
       accessories={list}
       isAdmin={isAdmin}
-      familyName="My Family"
+      familyName={familyName}
       refreshAction={refreshAllVisible}
       appleAccountExpired={appleAccountExpired}
     />

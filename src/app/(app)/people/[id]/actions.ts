@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireAdmin, requireUser } from "@/lib/auth-helpers";
 import { COLORS, DEFAULT_COLOR_ID } from "@/lib/colors";
 import { initialsFromName } from "@/lib/initials";
 
@@ -13,7 +13,9 @@ const COLOR_IDS = COLORS.map((c) => c.id) as [string, ...string[]];
 
 const UpdateMemberSchema = z.object({
   id: z.string().min(1),
-  name: z.string().trim().min(1, "Enter a name."),
+  // Name is admin-only; the form omits this field for self-edit and
+  // we fall back to the existing value.
+  name: z.string().trim().optional(),
   title: z.string().trim().optional(),
   color: z.enum(COLOR_IDS).default(DEFAULT_COLOR_ID),
   // Blank = leave existing password unchanged.
@@ -29,7 +31,9 @@ export async function updateMember(
   _prev: UpdateMemberState | undefined,
   formData: FormData,
 ): Promise<UpdateMemberState> {
-  await requireAdmin();
+  // Allow self-edit OR admin-edit-anyone. Name + email + role stay
+  // admin-only; members can change their own avatar, title, password.
+  const me = await requireUser();
 
   const parsed = UpdateMemberSchema.safeParse({
     id: formData.get("id"),
@@ -43,14 +47,22 @@ export async function updateMember(
   }
   const { id, name, title, color, password } = parsed.data;
 
+  const isAdmin = me.role === "ADMIN";
+  if (!isAdmin && me.id !== id) {
+    return { ok: false, message: "Not allowed." };
+  }
+
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing) return { ok: false, message: "Member not found." };
 
+  // Non-admin self-edit keeps existing name; admins can rename.
+  const nextName = isAdmin && name ? name : existing.name;
+
   const data: Parameters<typeof db.user.update>[0]["data"] = {
-    name,
+    name: nextName,
     title: title || null,
     color,
-    initials: initialsFromName(name) || existing.initials,
+    initials: initialsFromName(nextName) || existing.initials,
   };
   if (password && password.length > 0) {
     if (password.length < 8) {
@@ -63,7 +75,9 @@ export async function updateMember(
 
   revalidatePath("/people");
   revalidatePath(`/people/${id}`);
-  redirect(`/people/${id}`);
+  // Members don't have access to /people/[id] (admin-only), so send them
+  // back to /settings on self-edit.
+  redirect(isAdmin ? `/people/${id}` : "/settings");
 }
 
 export async function removeMember(formData: FormData): Promise<void> {

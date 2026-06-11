@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Download } from "lucide-react";
 import {
   ArrowLeft,
   Crosshair,
@@ -66,8 +68,11 @@ export default function MapShell({
   const [refreshing, setRefreshing] = useState(false);
   const [fitToken, setFitToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0); // enter/leave fires per child, so we count
   const meState = useMyLocation();
   const me = meState.kind === "ok" ? meState.loc : null;
+  const router = useRouter();
 
   // Surface non-ok states so the user knows *why* the blue dot is absent.
   useEffect(() => {
@@ -118,11 +123,74 @@ export default function MapShell({
     }
   }
 
+  function onDragEnter(e: React.DragEvent) {
+    if (!isAdmin) return;
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragActive(true);
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (!isAdmin) return;
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (!isAdmin) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragActive(false);
+    e.preventDefault();
+  }
+  function onDrop(e: React.DragEvent) {
+    if (!isAdmin) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      if (!/private key\s*:/i.test(text) || !/advertisement key\s*:/i.test(text)) {
+        setToast("Not a valid .keys file");
+        return;
+      }
+      try {
+        sessionStorage.setItem(
+          "fmf:pending-keys-import",
+          JSON.stringify({ filename: file.name, text }),
+        );
+      } catch {
+        /* private window / quota — fall through, /map/new still works */
+      }
+      router.push("/map/new");
+    };
+    reader.onerror = () => setToast("Couldn't read that file");
+    reader.readAsText(file);
+  }
+
   return (
-    <div className="map-screen">
+    <div
+      className="map-screen"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div className="map-layer">
         <MapView pins={visiblePins} me={me} fitToken={fitToken} />
       </div>
+      {dragActive && (
+        <div className="drop-overlay" aria-hidden>
+          <div className="drop-overlay-card">
+            <Download size={32} aria-hidden />
+            <strong>Drop to import</strong>
+            <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
+              Add this tracker from its .keys file
+            </span>
+          </div>
+        </div>
+      )}
       <div className="main-overlay">
         {appleAccountExpired && <ReLinkBanner isAdmin={isAdmin} />}
         <div className="map-top">

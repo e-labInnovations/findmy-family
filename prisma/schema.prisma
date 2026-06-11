@@ -108,6 +108,13 @@ model AccessoryOwner {
   @@index([userId])
 }
 
+// Single-row settings table. Editable by admin in /settings.
+model FamilyInfo {
+  id        String   @id @default("singleton")
+  name      String   @default("My Family")
+  updatedAt DateTime @updatedAt
+}
+
 // Single row. Apple identity that powers the whole family app.
 // Only the admin can update it.
 model AppleAccount {

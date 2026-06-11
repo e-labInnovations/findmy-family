@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Info, LogOut } from "lucide-react";
+import { Info, LogOut, Users } from "lucide-react";
 import { signOut } from "@/auth";
 import { requireUser } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
 import { colorOklch } from "@/lib/colors";
 import { AppleIcon } from "@/lib/custom-icons";
+import { getFamilyName } from "@/lib/family-info";
+import { FamilyNameEditor } from "./family-name-editor";
 import { unlinkAppleAccount } from "./apple/actions";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
   const appleAccount = isAdmin
     ? await db.appleAccount.findUnique({ where: { id: "singleton" } })
     : null;
+  const familyName = await getFamilyName();
 
   return (
     <>
@@ -37,7 +40,11 @@ export default async function SettingsPage() {
         <h1 className="page-h1">Settings</h1>
       </div>
 
-      <div className="set-profile">
+      <Link
+        href={`/people/${user.id}/edit`}
+        className="set-profile"
+        style={{ textDecoration: "none", color: "inherit" }}
+      >
         <span
           className="avatar"
           style={{ background: colorOklch(user.color) }}
@@ -57,6 +64,25 @@ export default async function SettingsPage() {
           </span>
         </div>
         {isAdmin && <span className="badge">Organizer</span>}
+      </Link>
+
+      <div className="set-section-label">Family</div>
+      <div className="set-group">
+        {isAdmin ? (
+          <FamilyNameEditor current={familyName} />
+        ) : (
+          <div className="set-row" style={{ cursor: "default" }}>
+            <span className="set-ico">
+              <Users size={18} />
+            </span>
+            <div className="col" style={{ flex: 1 }}>
+              <span className="set-label">Family name</span>
+              <span className="faint" style={{ fontSize: 12 }}>
+                {familyName}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {isAdmin && (

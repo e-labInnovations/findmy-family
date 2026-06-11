@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { addAccessory, type AddAccessoryState } from "./actions";
 import { COLORS, DEFAULT_COLOR_ID, colorOklch } from "@/lib/colors";
 import { DEVICE_TYPES, DeviceIcon } from "@/lib/device-types";
@@ -37,6 +37,22 @@ export function AddAccessoryForm({ members }: { members: MemberLite[] }) {
   const [importErr, setImportErr] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Pick up a .keys file that was drag-dropped onto /map. MapShell
+  // stashes the parsed content in sessionStorage and navigates here.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("fmf:pending-keys-import");
+      if (!raw) return;
+      sessionStorage.removeItem("fmf:pending-keys-import");
+      const parsed = JSON.parse(raw) as { filename?: string; text?: string };
+      if (parsed.text && parsed.filename) {
+        setImported({ filename: parsed.filename, text: parsed.text });
+      }
+    } catch {
+      /* corrupt stash — ignore */
+    }
+  }, []);
 
   function onFile(file: File | undefined) {
     if (!file) return;
