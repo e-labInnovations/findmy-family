@@ -22,6 +22,14 @@ export default async function MapPage() {
   const me = await requireUser();
   const isAdmin = me.role === "ADMIN";
 
+  const appleAccount = await db.appleAccount.findUnique({
+    where: { id: "singleton" },
+    select: { expiresAt: true },
+  });
+  const appleAccountExpired = !!(
+    appleAccount && appleAccount.expiresAt.getTime() < Date.now()
+  );
+
   const accessories = await db.accessory.findMany({
     where: isAdmin ? undefined : { owners: { some: { userId: me.id } } },
     orderBy: { name: "asc" },
@@ -104,6 +112,7 @@ export default async function MapPage() {
       isAdmin={isAdmin}
       familyName="My Family"
       refreshAction={refreshAllVisible}
+      appleAccountExpired={appleAccountExpired}
     />
   );
 }

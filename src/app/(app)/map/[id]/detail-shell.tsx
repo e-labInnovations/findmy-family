@@ -22,6 +22,7 @@ import { decodeBattery } from "@/lib/battery";
 import { useMyLocation } from "@/lib/use-my-location";
 import { ThemeToggle } from "@/lib/theme-toggle";
 import { Toast } from "@/lib/toast";
+import { ReLinkBanner } from "@/lib/relink-banner";
 
 export interface DetailAccessory {
   id: string;
@@ -65,6 +66,7 @@ export default function DetailShell({
   isAdmin,
   refreshAction,
   deleteAction,
+  appleAccountExpired,
 }: {
   accessory: DetailAccessory;
   reports: ReportsState;
@@ -72,6 +74,7 @@ export default function DetailShell({
   isAdmin: boolean;
   refreshAction: (formData: FormData) => Promise<void>;
   deleteAction: (formData: FormData) => Promise<void>;
+  appleAccountExpired: boolean;
 }) {
   const router = useRouter();
   const [snap, setSnap] = useState<SheetSnap>("mid");
@@ -158,6 +161,7 @@ export default function DetailShell({
         />
       </div>
       <div className="main-overlay">
+        {appleAccountExpired && <ReLinkBanner isAdmin={isAdmin} />}
         <div className="map-top">
           <Link href="/map" className="icon-btn glass" aria-label="Back">
             <ArrowLeft size={18} aria-hidden />

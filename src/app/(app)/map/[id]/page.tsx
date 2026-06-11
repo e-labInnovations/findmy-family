@@ -27,6 +27,14 @@ export default async function AccessoryDetailPage({
   const { view: viewParam } = await searchParams;
   const view = viewParam === "history" ? "history" : "detail";
 
+  const appleAccount = await db.appleAccount.findUnique({
+    where: { id: "singleton" },
+    select: { expiresAt: true },
+  });
+  const appleAccountExpired = !!(
+    appleAccount && appleAccount.expiresAt.getTime() < Date.now()
+  );
+
   const acc = await db.accessory.findUnique({
     where: { id },
     include: {
@@ -104,6 +112,7 @@ export default async function AccessoryDetailPage({
       isAdmin={isAdmin}
       refreshAction={refreshAccessory}
       deleteAction={removeAccessory}
+      appleAccountExpired={appleAccountExpired}
     />
   );
 }

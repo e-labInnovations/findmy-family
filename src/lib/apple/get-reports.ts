@@ -16,7 +16,11 @@ import "server-only";
 import { db } from "@/lib/db";
 import { decryptAtRest } from "@/lib/crypto-at-rest";
 import { reverseGeocode } from "@/lib/geocode";
-import { fetchReports, type ReportResult } from "./reports";
+import {
+  AppleTokensExpiredError,
+  fetchReports,
+  type ReportResult,
+} from "./reports";
 
 export interface ReportsForAccessory {
   accessoryId: string;
@@ -100,14 +104,28 @@ export async function fetchAndIngest(
     const dsid = decryptAtRest(account.dsidEnc).toString("utf-8");
     const spToken = decryptAtRest(account.spTokenEnc).toString("utf-8");
 
-    const flat = await fetchReports(
-      { dsid, spToken },
-      lookups,
-      { startDateMs: widestStart, endDateMs: endDate },
-    );
-
-    if (flat.length > 0) {
-      await persistReports(flat, byHash);
+    try {
+      const flat = await fetchReports(
+        { dsid, spToken },
+        lookups,
+        { startDateMs: widestStart, endDateMs: endDate },
+      );
+      if (flat.length > 0) {
+        await persistReports(flat, byHash);
+      }
+    } catch (e) {
+      if (e instanceof AppleTokensExpiredError) {
+        // Mark the account as expired so subsequent visits skip the Apple
+        // roundtrip until the admin re-links. expiresAt: epoch is our
+        // sentinel — anything in the past triggers the no-fetch branch.
+        console.warn("[apple] tokens rejected (401/403) — marking expired");
+        await db.appleAccount.update({
+          where: { id: "singleton" },
+          data: { expiresAt: new Date(0) },
+        });
+      } else {
+        throw e;
+      }
     }
   }
 

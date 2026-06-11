@@ -19,6 +19,14 @@ import { decryptReport, type DecryptedReport } from "./crypto";
 import { appleFetch, appleInsecureDispatcher } from "./gsa-transport";
 import { buildAnisetteEnvelope } from "./gsa-headers";
 
+/** Thrown when Apple returns 401/403, meaning searchPartyToken is dead. */
+export class AppleTokensExpiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AppleTokensExpiredError";
+  }
+}
+
 export interface ReportLookup {
   /** SHA-256(P.x) base64 — matches a row in Accessory.hashedAdvKey */
   hashedAdvKey: string;
@@ -77,6 +85,11 @@ export async function fetchReports(
     dispatcher: appleInsecureDispatcher,
   });
 
+  if (resp.status === 401 || resp.status === 403) {
+    throw new AppleTokensExpiredError(
+      `apple /acsnservice/fetch returned ${resp.status}`,
+    );
+  }
   if (!resp.ok) {
     throw new Error(`apple /acsnservice/fetch returned ${resp.status} ${resp.statusText}`);
   }

@@ -19,6 +19,7 @@ import { BatteryIndicator } from "@/lib/battery-display";
 import { useMyLocation } from "@/lib/use-my-location";
 import { ThemeToggle } from "@/lib/theme-toggle";
 import { Toast } from "@/lib/toast";
+import { ReLinkBanner } from "@/lib/relink-banner";
 
 export interface AccessoryListItem {
   id: string;
@@ -51,12 +52,14 @@ export default function MapShell({
   isAdmin,
   familyName,
   refreshAction,
+  appleAccountExpired,
 }: {
   pins: MapPin[];
   accessories: AccessoryListItem[];
   isAdmin: boolean;
   familyName: string;
   refreshAction: () => Promise<void>;
+  appleAccountExpired: boolean;
 }) {
   const [snap, setSnap] = useState<SheetSnap>("half");
   const [q, setQ] = useState("");
@@ -121,6 +124,7 @@ export default function MapShell({
         <MapView pins={visiblePins} me={me} fitToken={fitToken} />
       </div>
       <div className="main-overlay">
+        {appleAccountExpired && <ReLinkBanner isAdmin={isAdmin} />}
         <div className="map-top">
           <div className="map-title">
             <div className="mt-logo">
