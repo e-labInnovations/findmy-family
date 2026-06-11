@@ -26,7 +26,13 @@ export interface AccessoryListItem {
   type: string;
   color: string;
   primary: { name: string; initials: string; color: string } | null;
-  latest: { lat: number; lng: number; timestamp: number; status: number } | null;
+  latest: {
+    lat: number;
+    lng: number;
+    timestamp: number;
+    status: number;
+    place: string | null;
+  } | null;
 }
 
 type SheetSnap = "peek" | "half" | "full";
@@ -72,6 +78,9 @@ export default function MapShell({
         `${a.name} ${a.primary?.name ?? ""}`.toLowerCase().includes(q.toLowerCase()),
       )
     : accessories;
+  const visiblePins = q
+    ? pins.filter((p) => filtered.some((a) => a.id === p.accessoryId))
+    : pins;
 
   const startY = useRef<number | null>(null);
   const startSnap = useRef<SheetSnap>("half");
@@ -109,7 +118,7 @@ export default function MapShell({
   return (
     <div className="map-screen">
       <div className="map-layer">
-        <MapView pins={pins} me={me} fitToken={fitToken} />
+        <MapView pins={visiblePins} me={me} fitToken={fitToken} />
       </div>
       <div className="main-overlay">
         <div className="map-top">
@@ -233,7 +242,11 @@ function DeviceRow({ a }: { a: AccessoryListItem }) {
           />
         </div>
         <span className="drow-sub ellipsis">
-          {deviceTypeLabel(a.type)}
+          {a.latest?.place ? (
+            <>{a.latest.place}</>
+          ) : (
+            <>{deviceTypeLabel(a.type)}</>
+          )}
           {a.primary && (
             <>
               <span className="dot-sep">·</span>

@@ -36,7 +36,13 @@ export default async function MapPage() {
 
   let latestByAccessory = new Map<
     string,
-    { lat: number; lng: number; timestamp: number; status: number }
+    {
+      lat: number;
+      lng: number;
+      timestamp: number;
+      status: number;
+      place: string | null;
+    }
   >();
   try {
     const reports = await fetchAndIngest(accessories.map((a) => a.id));
@@ -51,6 +57,7 @@ export default async function MapPage() {
               lng: r.latest!.lng,
               timestamp: r.latest!.timestamp,
               status: r.latest!.status,
+              place: r.latest!.place ?? null,
             },
           ]),
       );

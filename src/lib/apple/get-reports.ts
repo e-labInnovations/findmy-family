@@ -119,25 +119,27 @@ export async function fetchAndIngest(
     orderBy: { timestamp: "desc" },
   });
 
-  // Cache-only enrichment for the latest pin per accessory. The list
-  // view should never pay for a Nominatim round-trip — only what's
-  // already in GeocodeCache surfaces here. Detail pages do the live call.
-  const latestKeys = new Map<string, { latRound: number; lngRound: number }>();
+  // Cache-only place enrichment across ALL trail points, not just the
+  // latest — otherwise history items past index 0 always render as
+  // "lat, lng" even when their coord IS cached.
+  const uniqueKeys = new Map<string, { latRound: number; lngRound: number }>();
   for (const r of rows) {
-    if (latestKeys.has(r.accessoryId)) continue; // rows are sorted desc, first wins
-    latestKeys.set(r.accessoryId, {
-      latRound: Math.round(r.lat * 10_000) / 10_000,
-      lngRound: Math.round(r.lng * 10_000) / 10_000,
-    });
+    const latRound = Math.round(r.lat * 10_000) / 10_000;
+    const lngRound = Math.round(r.lng * 10_000) / 10_000;
+    const key = `${latRound},${lngRound}`;
+    if (!uniqueKeys.has(key)) uniqueKeys.set(key, { latRound, lngRound });
   }
-  const cachedPlaces = await db.geocodeCache.findMany({
-    where: {
-      OR: Array.from(latestKeys.values()).map((k) => ({
-        latRound: k.latRound,
-        lngRound: k.lngRound,
-      })),
-    },
-  });
+  const cachedPlaces =
+    uniqueKeys.size === 0
+      ? []
+      : await db.geocodeCache.findMany({
+          where: {
+            OR: Array.from(uniqueKeys.values()).map((k) => ({
+              latRound: k.latRound,
+              lngRound: k.lngRound,
+            })),
+          },
+        });
   const placeByKey = new Map(
     cachedPlaces.map((c) => [`${c.latRound},${c.lngRound}`, c.place]),
   );
@@ -157,6 +159,23 @@ export async function fetchAndIngest(
       place: placeByKey.get(`${latRound},${lngRound}`) ?? null,
     });
     grouped.set(r.accessoryId, list);
+  }
+
+  // Background-enrich uncached coords. reverseGeocode persists into
+  // GeocodeCache; subsequent visits (or refresh) hydrate `place` from
+  // cache. Capped per request so a long history doesn't drown the
+  // 1-req/sec Nominatim queue. Errors swallowed — best-effort.
+  const fired = new Set<string>();
+  const FIRE_CAP = 25;
+  outer: for (const r of rows) {
+    const latRound = Math.round(r.lat * 10_000) / 10_000;
+    const lngRound = Math.round(r.lng * 10_000) / 10_000;
+    const key = `${latRound},${lngRound}`;
+    if (placeByKey.has(key)) continue;
+    if (fired.has(key)) continue;
+    fired.add(key);
+    void reverseGeocode(r.lat, r.lng).catch(() => undefined);
+    if (fired.size >= FIRE_CAP) break outer;
   }
 
   return accessories.map((a) => {
