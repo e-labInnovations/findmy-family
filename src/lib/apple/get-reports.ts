@@ -115,14 +115,16 @@ export async function fetchAndIngest(
       }
     } catch (e) {
       if (e instanceof AppleTokensExpiredError) {
-        // Mark the account as expired so subsequent visits skip the Apple
-        // roundtrip until the admin re-links. expiresAt: epoch is our
-        // sentinel — anything in the past triggers the no-fetch branch.
-        console.warn("[apple] tokens rejected (401/403) — marking expired");
-        await db.appleAccount.update({
-          where: { id: "singleton" },
-          data: { expiresAt: new Date(0) },
-        });
+        // We used to auto-mark expiresAt = epoch here, but a single
+        // 401/403 turned out to be a poor signal of real revocation —
+        // Apple returns 401 for rate limits, anisette hiccups, and
+        // transient infra too. The 30-day heuristic clock from
+        // finalize() is now the only thing that flips us to expired.
+        // Failed fetches just degrade silently to DB-cached history.
+        console.warn(
+          "[apple] /acsnservice/fetch rejected — keeping tokens, will retry next visit:",
+          (e as Error).message,
+        );
       } else {
         throw e;
       }

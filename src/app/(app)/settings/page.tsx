@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { colorOklch } from "@/lib/colors";
 import { AppleIcon } from "@/lib/custom-icons";
 import { getFamilyName } from "@/lib/family-info";
+import { nowMs } from "@/lib/now";
 import { FamilyNameEditor } from "./family-name-editor";
 import { unlinkAppleAccount } from "./apple/actions";
 
@@ -32,6 +33,8 @@ export default async function SettingsPage() {
   const appleAccount = isAdmin
     ? await db.appleAccount.findUnique({ where: { id: "singleton" } })
     : null;
+  const appleAccountExpired =
+    !!appleAccount && appleAccount.expiresAt.getTime() < nowMs();
   const familyName = await getFamilyName();
 
   return (
@@ -97,12 +100,20 @@ export default async function SettingsPage() {
                 <div className="col">
                   <span className="set-label">{appleAccount.appleId}</span>
                   <span className="faint" style={{ fontSize: 12 }}>
-                    Linked &middot; tokens expire{" "}
-                    {appleAccount.expiresAt.toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
+                    {appleAccountExpired ? (
+                      <span style={{ color: "var(--warn)" }}>
+                        Expired &middot; re-link to keep updating
+                      </span>
+                    ) : (
+                      <>
+                        Linked &middot; tokens expire{" "}
+                        {appleAccount.expiresAt.toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </>
+                    )}
                   </span>
                 </div>
               </div>

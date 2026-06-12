@@ -73,28 +73,69 @@ export async function fetchReports(
   const credsB64 = Buffer.from(`${auth.dsid}:${auth.spToken}`).toString("base64");
 
   const anisette = await buildAnisetteEnvelope();
+  const requestHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${credsB64}`,
+    "User-Agent": "FindMy-Family/0.1",
+    ...anisette,
+  };
+
+  // Verbose request log. dsid stays visible (it's a public Apple
+  // account id), spToken is redacted to first 8 + last 4 chars so we
+  // can spot whitespace / mangling without leaking the bearer.
+  const dsidShown = auth.dsid;
+  const tokShown =
+    auth.spToken.length > 16
+      ? `${auth.spToken.slice(0, 8)}…${auth.spToken.slice(-4)} (${auth.spToken.length} chars)`
+      : `(${auth.spToken.length} chars)`;
+  console.log("[apple/fetch] →", {
+    url: "https://gateway.icloud.com/acsnservice/fetch",
+    dsid: dsidShown,
+    spToken: tokShown,
+    ids: lookups.map((l) => l.hashedAdvKey.slice(0, 8) + "…"),
+    window: {
+      startDate: new Date(startDate).toISOString(),
+      endDate: new Date(endDate).toISOString(),
+    },
+    anisetteMD: anisette["X-Apple-I-MD"]?.slice(0, 12) + "…",
+    anisetteMDM: anisette["X-Apple-I-MD-M"]?.slice(0, 12) + "…",
+    deviceId: anisette["X-Mme-Device-Id"],
+  });
+
   const resp = await appleFetch("https://gateway.icloud.com/acsnservice/fetch", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${credsB64}`,
-      "User-Agent": "FindMy-Family/0.1",
-      ...anisette,
-    },
+    headers: requestHeaders,
     body: JSON.stringify(body),
     dispatcher: appleInsecureDispatcher,
   });
 
+  // Cache response headers + body before we branch on status so we can
+  // log them even on errors. Apple's /acsnservice/fetch always returns
+  // application/json (often with `{statusCode: N}` even on non-2xx).
+  const responseHeaders: Record<string, string> = {};
+  resp.headers.forEach((v, k) => {
+    responseHeaders[k] = v;
+  });
+  const rawText = await resp.text();
+  console.log("[apple/fetch] ← status=%d", resp.status, {
+    headers: responseHeaders,
+    bodyBytes: rawText.length,
+    bodyHead: rawText.slice(0, 300),
+  });
+
   if (resp.status === 401 || resp.status === 403) {
     throw new AppleTokensExpiredError(
-      `apple /acsnservice/fetch returned ${resp.status}`,
+      `apple /acsnservice/fetch returned ${resp.status} — body: ${rawText.slice(0, 200)}`,
     );
   }
   if (!resp.ok) {
-    throw new Error(`apple /acsnservice/fetch returned ${resp.status} ${resp.statusText}`);
+    throw new Error(
+      `apple /acsnservice/fetch returned ${resp.status} ${resp.statusText} — body: ${rawText.slice(0, 200)}`,
+    );
   }
 
-  const json = (await resp.json()) as {
+  // resp body was already consumed by the diagnostic log above.
+  const json = JSON.parse(rawText) as {
     results: Array<{
       id: string; // hashedAdvKey
       payload: string; // base64
