@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireUser } from "@/lib/auth-helpers";
 import { AddAccessoryForm } from "./add-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewAccessoryPage() {
-  await requireAdmin();
+  const me = await requireUser();
+  const isAdmin = me.role === "ADMIN";
   const members = await db.user.findMany({
     select: { id: true, name: true, color: true, initials: true, title: true },
     orderBy: [{ role: "asc" }, { name: "asc" }],
@@ -36,7 +37,11 @@ export default async function NewAccessoryPage() {
       </div>
 
       <div className="screen-body">
-        <AddAccessoryForm members={members} />
+        <AddAccessoryForm
+          members={members}
+          currentUserId={me.id}
+          isAdmin={isAdmin}
+        />
       </div>
     </>
   );

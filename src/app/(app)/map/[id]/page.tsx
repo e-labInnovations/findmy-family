@@ -52,6 +52,8 @@ export default async function AccessoryDetailPage({
   const isAdmin = me.role === "ADMIN";
   const isOwner = acc.owners.some((o) => o.userId === me.id);
   if (!isAdmin && !isOwner) forbidden();
+  const isPrimary = acc.owners.some((o) => o.userId === me.id && o.isPrimary);
+  const canManage = isAdmin || isPrimary;
 
   let reports: ReportsState;
   try {
@@ -110,6 +112,7 @@ export default async function AccessoryDetailPage({
       reports={reports}
       view={view}
       isAdmin={isAdmin}
+      canManage={canManage}
       refreshAction={refreshAccessory}
       deleteAction={removeAccessory}
       appleAccountExpired={appleAccountExpired}

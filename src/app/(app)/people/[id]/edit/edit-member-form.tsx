@@ -16,25 +16,15 @@ export interface EditableMember {
   role: "ADMIN" | "MEMBER";
 }
 
-export function EditMemberForm({
-  member,
-  canEditName = true,
-}: {
-  member: EditableMember;
-  /** When false, the name field is hidden — server keeps the existing
-   *  value. Used for non-admin self-edit. */
-  canEditName?: boolean;
-}) {
+export function EditMemberForm({ member }: { member: EditableMember }) {
   const [state, formAction, pending] = useActionState(updateMember, initialState);
   const [name, setName] = useState(member.name);
   const [color, setColor] = useState(member.color);
   const [showPw, setShowPw] = useState(false);
 
   const initials = useMemo(
-    () =>
-      initialsFromName(canEditName ? name : member.name) ||
-      member.name.slice(0, 2).toUpperCase(),
-    [name, member.name, canEditName],
+    () => initialsFromName(name) || member.name.slice(0, 2).toUpperCase(),
+    [name, member.name],
   );
 
   return (
@@ -45,34 +35,29 @@ export function EditMemberForm({
         <span className="avatar xl" style={{ background: colorOklch(color) }}>
           {initials}
         </span>
-        {!canEditName && (
-          <strong style={{ fontSize: 18, marginTop: 6 }}>{member.name}</strong>
-        )}
         <span className="faint mono" style={{ fontSize: 12 }}>{member.email}</span>
         {member.role === "ADMIN" && <span className="badge">Family Organizer</span>}
       </div>
 
-      {canEditName && (
-        <>
-          <label className="field-label" htmlFor="name">Full name</label>
-          <input
-            id="name"
-            name="name"
-            className="text-field"
-            autoComplete="off"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </>
-      )}
+      <label className="field-label" htmlFor="name">Full name</label>
+      <input
+        id="name"
+        name="name"
+        className="text-field"
+        autoComplete="off"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        required
+      />
 
-      <label className="field-label" htmlFor="title">Role / description</label>
+      <label className="field-label" htmlFor="title">
+        Title <span className="field-label-opt">optional</span>
+      </label>
       <input
         id="title"
         name="title"
         className="text-field"
-        placeholder="e.g. Teen · 16"
+        placeholder="e.g. Teen · 16 · Parent"
         defaultValue={member.title ?? ""}
       />
 

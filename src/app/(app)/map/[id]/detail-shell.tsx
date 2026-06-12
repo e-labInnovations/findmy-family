@@ -18,6 +18,7 @@ import type { MapPin, MapTrail } from "../map-view";
 import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
 import { BatteryIndicator } from "@/lib/battery-display";
+import { nowMs } from "@/lib/now";
 import { decodeBattery } from "@/lib/battery";
 import { useMyLocation } from "@/lib/use-my-location";
 import { ThemeToggle } from "@/lib/theme-toggle";
@@ -64,6 +65,7 @@ export default function DetailShell({
   reports,
   view,
   isAdmin,
+  canManage,
   refreshAction,
   deleteAction,
   appleAccountExpired,
@@ -72,6 +74,8 @@ export default function DetailShell({
   reports: ReportsState;
   view: "detail" | "history";
   isAdmin: boolean;
+  /** Admin OR this accessory's primary owner — controls Edit + Delete. */
+  canManage: boolean;
   refreshAction: (formData: FormData) => Promise<void>;
   deleteAction: (formData: FormData) => Promise<void>;
   appleAccountExpired: boolean;
@@ -102,8 +106,35 @@ export default function DetailShell({
         }
       : null;
 
+  // One source of truth for clustering — shared by the pin, polyline,
+  // and history sheet so they all agree on which point is "current".
+  const trailItems = reports.kind === "ok" ? reports.trail : [];
+  const clusters = clusterTrail(trailItems, 50);
+
+  // The latest cluster's highest-confidence point becomes "current".
+  // Using reports.latest directly caused a visual mismatch — the pin
+  // sat on the most recent (often noisier) fix while the history cluster
+  // labeled the same stay with its higher-confidence representative.
+  const currentBest =
+    clusters.length > 0 ? trailItems[clusters[0].bestIndex] : null;
+
+  // Reshape the reports object so the entire detail card (lat/lng,
+  // place, confidence, status, battery) reads from the same point as
+  // the pin and history cluster. Fall back to reports.latest.place
+  // when the best point hasn't been geocoded yet.
+  const displayReports: ReportsState =
+    reports.kind === "ok" && currentBest
+      ? {
+          ...reports,
+          latest: {
+            ...currentBest,
+            place: currentBest.place ?? reports.latest.place ?? null,
+          },
+        }
+      : reports;
+
   const pins: MapPin[] =
-    reports.kind === "ok"
+    currentBest
       ? [
           {
             accessoryId: accessory.id,
@@ -111,19 +142,25 @@ export default function DetailShell({
             type: accessory.type,
             color: accessory.color,
             initials: accessory.name.slice(0, 1).toUpperCase(),
-            lat: reports.latest.lat,
-            lng: reports.latest.lng,
-            timestamp: reports.latest.timestamp,
+            lat: currentBest.lat,
+            lng: currentBest.lng,
+            timestamp: currentBest.timestamp,
           },
         ]
       : [];
+
+  // Trail polyline uses cluster representatives, not raw pings — keeps
+  // the dashed line clean instead of tangling on each stationary spot.
   const trails: MapTrail[] =
-    reports.kind === "ok" && reports.trail.length > 1
+    clusters.length > 1
       ? [
           {
             accessoryId: accessory.id,
             color: accessory.color,
-            points: reports.trail.map((r) => ({ lat: r.lat, lng: r.lng })),
+            points: clusters.map((c) => ({
+              lat: trailItems[c.bestIndex].lat,
+              lng: trailItems[c.bestIndex].lng,
+            })),
           },
         ]
       : [];
@@ -208,7 +245,7 @@ export default function DetailShell({
           {view === "history" ? (
             <HistorySheet
               accessory={accessory}
-              reports={reports}
+              reports={displayReports}
               selectedIndex={selectedHistoryIndex}
               onSelectIndex={setSelectedHistoryIndex}
               days={historyDays}
@@ -218,8 +255,9 @@ export default function DetailShell({
           ) : (
             <DetailBody
               accessory={accessory}
-              reports={reports}
+              reports={displayReports}
               isAdmin={isAdmin}
+              canManage={canManage}
               deleteAction={deleteAction}
               onClose={() => router.push("/map")}
             />
@@ -235,12 +273,14 @@ function DetailBody({
   accessory,
   reports,
   isAdmin,
+  canManage,
   deleteAction,
   onClose,
 }: {
   accessory: DetailAccessory;
   reports: ReportsState;
   isAdmin: boolean;
+  canManage: boolean;
   deleteAction: (formData: FormData) => Promise<void>;
   onClose: () => void;
 }) {
@@ -352,7 +392,7 @@ function DetailBody({
         </div>
       )}
 
-      {(reports.kind === "ok" || isAdmin) && (
+      {(reports.kind === "ok" || canManage) && (
         <div className="dd-actions">
           {reports.kind === "ok" && (
             <>
@@ -375,7 +415,7 @@ function DetailBody({
               </Link>
             </>
           )}
-          {isAdmin && (
+          {canManage && (
             <Link href={`/map/${accessory.id}/edit`} className="dd-action">
               <span className="dd-action-ico">
                 <Edit3 size={18} aria-hidden />
@@ -391,6 +431,17 @@ function DetailBody({
           <div className="dd-stat">
             <span className="muted">Battery</span>
             <BatteryIndicator statusByte={reports.latest.status} withLabel size={20} />
+          </div>
+        )}
+        {reports.kind === "ok" && (
+          <div className="dd-stat">
+            <span className="muted">Confidence</span>
+            <span>
+              {reports.latest.confidence}
+              <span className="faint" style={{ marginLeft: 6, fontSize: 12 }}>
+                / 255
+              </span>
+            </span>
           </div>
         )}
         <div className="dd-stat">
@@ -462,7 +513,7 @@ function DetailBody({
         ))}
       </div>
 
-      {isAdmin && (
+      {canManage && (
         <form action={deleteAction} style={{ marginTop: 14 }}>
           <input type="hidden" name="id" value={accessory.id} />
           <button type="submit" className="btn danger">
@@ -507,8 +558,14 @@ function HistorySheet({
     days === "all"
       ? allItems
       : allItems.filter(
-          (h) => Date.now() / 1000 - h.timestamp <= days * 86400,
+          (h) => nowMs() / 1000 - h.timestamp <= days * 86400,
         );
+  // Collapse adjacent same-location pings (GPS jitter at a stationary
+  // tracker generates dozens per hour). 50m threshold groups room-level
+  // moves into one entry; each cluster picks its highest-confidence
+  // ping as the representative so the map highlight points at the
+  // best fix.
+  const clusters = clusterTrail(items, 50);
   return (
     <>
       <div className="hist-head">
@@ -547,52 +604,71 @@ function HistorySheet({
       </div>
       <div className="dd-scroll">
         <div className="hist-wrap">
-          {items.length === 0 ? (
+          {clusters.length === 0 ? (
             <div className="empty-min">
               {allItems.length === 0
                 ? "No history yet."
                 : `No reports in the last ${days === "all" ? "selected range" : `${days}d`}.`}
             </div>
           ) : (
-            items.map((h, i) => {
-              const isActive = i === selectedIndex;
-              const dotColor = isActive || i === 0 ? hex : "var(--surface-3)";
-              const borderColor = isActive || i === 0 ? hex : "var(--border)";
+            clusters.map((c, ci) => {
+              const best = items[c.bestIndex];
+              const isActive =
+                selectedIndex !== null && c.indices.includes(selectedIndex);
+              const isHead = ci === 0;
+              const dotColor = isActive || isHead ? hex : "var(--surface-3)";
+              const borderColor = isActive || isHead ? hex : "var(--border)";
+              const count = c.indices.length;
+              const durationSec = c.end - c.start;
               return (
-              <button
-                type="button"
-                className={`hist-item${isActive ? " active" : ""}`}
-                key={`${h.timestamp}-${i}`}
-                onClick={() => onSelectIndex(isActive ? null : i)}
-              >
-                <div className="hist-rail">
-                  <span
-                    className="hist-dot"
-                    style={{ background: dotColor, borderColor }}
-                  />
-                  {i < items.length - 1 && <span className="hist-line" />}
-                </div>
-                <div className="hist-body">
-                  <div className="hist-top">
-                    <strong>{shortTime(h.timestamp)}</strong>
-                    {i === 0 && <span className="badge">Now</span>}
+                <button
+                  type="button"
+                  className={`hist-item${isActive ? " active" : ""}`}
+                  key={`${c.bestIndex}-${c.start}`}
+                  onClick={() =>
+                    onSelectIndex(isActive ? null : c.bestIndex)
+                  }
+                >
+                  <div className="hist-rail">
+                    <span
+                      className="hist-dot"
+                      style={{ background: dotColor, borderColor }}
+                    />
+                    {ci < clusters.length - 1 && <span className="hist-line" />}
                   </div>
-                  {h.place && (
-                    <span style={{ fontSize: 13, color: "var(--text)" }}>
-                      {h.place}
+                  <div className="hist-body">
+                    <div className="hist-top">
+                      <strong>{shortTime(c.end)}</strong>
+                      {isHead && <span className="badge">Now</span>}
+                      {count > 1 && (
+                        <span
+                          className="chip"
+                          style={{ height: 22, fontSize: 11, padding: "0 8px" }}
+                        >
+                          ×{count}
+                        </span>
+                      )}
+                    </div>
+                    {best.place && (
+                      <span style={{ fontSize: 13, color: "var(--text)" }}>
+                        {best.place}
+                      </span>
+                    )}
+                    <span className="faint" style={{ fontSize: 13 }}>
+                      {count > 1
+                        ? `${shortTime(c.start)} – ${shortTime(c.end)} · ${formatDuration(durationSec)}`
+                        : relativeAgo(c.end)}
+                      <span className="dot-sep"> · </span>
+                      conf {best.confidence}
                     </span>
-                  )}
-                  <span className="faint" style={{ fontSize: 13 }}>
-                    {relativeAgo(h.timestamp)}
-                  </span>
-                  <span
-                    className="faint mono"
-                    style={{ fontSize: 11 }}
-                  >
-                    {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
-                  </span>
-                </div>
-              </button>
+                    <span
+                      className="faint mono"
+                      style={{ fontSize: 11 }}
+                    >
+                      {best.lat.toFixed(4)}, {best.lng.toFixed(4)}
+                    </span>
+                  </div>
+                </button>
               );
             })
           )}
@@ -620,6 +696,85 @@ function shortTime(secondsSinceEpoch: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+interface HistoryCluster {
+  /** Indices into the source `items` array. */
+  indices: number[];
+  /** Index of the highest-confidence report in this cluster — used as the
+   *  representative point for map highlight + display. */
+  bestIndex: number;
+  /** Earliest timestamp in the cluster (seconds since epoch). */
+  start: number;
+  /** Latest timestamp in the cluster (seconds since epoch). */
+  end: number;
+}
+
+/**
+ * Group consecutive same-spot reports together. A FindMy tracker
+ * sitting still emits dozens of pings per hour with GPS noise of
+ * 10–30m; collapsing them into one timeline entry makes the history
+ * readable. Boundaries respect time order — A → B → A becomes three
+ * clusters, not two.
+ *
+ * `items` is expected newest-first (the existing trail convention).
+ */
+function clusterTrail(
+  items: DetailReport[],
+  thresholdMeters: number,
+): HistoryCluster[] {
+  const clusters: HistoryCluster[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const h = items[i];
+    const cur = clusters[clusters.length - 1];
+    const lastPoint = cur ? items[cur.indices[cur.indices.length - 1]] : null;
+    if (
+      cur &&
+      lastPoint &&
+      distanceMeters(h, lastPoint) <= thresholdMeters
+    ) {
+      cur.indices.push(i);
+      cur.start = Math.min(cur.start, h.timestamp);
+      cur.end = Math.max(cur.end, h.timestamp);
+      if (h.confidence > items[cur.bestIndex].confidence) {
+        cur.bestIndex = i;
+      }
+    } else {
+      clusters.push({
+        indices: [i],
+        bestIndex: i,
+        start: h.timestamp,
+        end: h.timestamp,
+      });
+    }
+  }
+  return clusters;
+}
+
+/** Haversine distance between two lat/lng pairs in meters. */
+function distanceMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem === 0 ? `${h} hr` : `${h} hr ${rem} min`;
 }
 
 function withinMinutes(secondsSinceEpoch: number, minutes: number): boolean {

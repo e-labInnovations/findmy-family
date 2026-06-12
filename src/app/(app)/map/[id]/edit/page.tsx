@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { forbidden, notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireUser } from "@/lib/auth-helpers";
 import { EditAccessoryForm } from "./edit-form";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export default async function EditAccessoryPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin();
+  const me = await requireUser();
   const { id } = await params;
 
   const [acc, members] = await Promise.all([
@@ -27,6 +27,11 @@ export default async function EditAccessoryPage({
     }),
   ]);
   if (!acc) notFound();
+
+  // Admin can edit any accessory; non-admins only if they're the primary owner.
+  const isAdmin = me.role === "ADMIN";
+  const isPrimary = acc.owners.some((o) => o.userId === me.id && o.isPrimary);
+  if (!isAdmin && !isPrimary) forbidden();
 
   return (
     <>

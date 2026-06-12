@@ -4,10 +4,27 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAdmin, requireUser } from "@/lib/auth-helpers";
+import { requireUser } from "@/lib/auth-helpers";
 import { COLORS, DEFAULT_COLOR_ID } from "@/lib/colors";
 import { DEVICE_TYPES } from "@/lib/device-types";
 import { fetchAndIngest } from "@/lib/apple/get-reports";
+
+/**
+ * Returns true when the current user can edit/delete this accessory:
+ * admins always; everyone else only if they're the primary owner.
+ */
+async function canManageAccessory(
+  accessoryId: string,
+  meId: string,
+  isAdmin: boolean,
+): Promise<boolean> {
+  if (isAdmin) return true;
+  const row = await db.accessoryOwner.findUnique({
+    where: { accessoryId_userId: { accessoryId, userId: meId } },
+    select: { isPrimary: true },
+  });
+  return !!row?.isPrimary;
+}
 
 const COLOR_IDS = COLORS.map((c) => c.id) as [string, ...string[]];
 const TYPE_IDS = DEVICE_TYPES.map((t) => t.id) as [string, ...string[]];
@@ -36,9 +53,13 @@ export async function refreshAccessory(formData: FormData): Promise<void> {
 }
 
 export async function removeAccessory(formData: FormData): Promise<void> {
-  await requireAdmin();
+  const me = await requireUser();
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("Missing accessory id.");
+
+  const allowed = await canManageAccessory(id, me.id, me.role === "ADMIN");
+  if (!allowed) throw new Error("Not allowed.");
+
   await db.accessory.delete({ where: { id } });
   revalidatePath("/map");
   redirect("/map");
@@ -62,7 +83,7 @@ export async function updateAccessory(
   _prev: UpdateAccessoryState | undefined,
   formData: FormData,
 ): Promise<UpdateAccessoryState> {
-  await requireAdmin();
+  const me = await requireUser();
 
   const parsed = UpdateAccessorySchema.safeParse({
     id: formData.get("id"),
@@ -76,6 +97,18 @@ export async function updateAccessory(
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { id, name, type, color, primaryOwnerId, owners } = parsed.data;
+
+  const isAdmin = me.role === "ADMIN";
+  const allowed = await canManageAccessory(id, me.id, isAdmin);
+  if (!allowed) return { ok: false, message: "Not allowed." };
+
+  // Non-admin primary owners can't transfer primary away from themselves.
+  if (!isAdmin && primaryOwnerId !== me.id) {
+    return {
+      ok: false,
+      message: "Only admins can transfer the primary owner.",
+    };
+  }
 
   const ownerIds = Array.from(new Set([...(owners ?? []), primaryOwnerId]));
   const users = await db.user.findMany({

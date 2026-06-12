@@ -48,7 +48,6 @@ export default async function EditMemberPage({
       </div>
       <div className="screen-body">
         <EditMemberForm
-          canEditName={isAdmin}
           member={{
             id: member.id,
             name: member.name,

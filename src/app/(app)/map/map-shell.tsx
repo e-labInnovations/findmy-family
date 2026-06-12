@@ -124,25 +124,21 @@ export default function MapShell({
   }
 
   function onDragEnter(e: React.DragEvent) {
-    if (!isAdmin) return;
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     dragDepth.current += 1;
     setDragActive(true);
   }
   function onDragOver(e: React.DragEvent) {
-    if (!isAdmin) return;
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
   }
   function onDragLeave(e: React.DragEvent) {
-    if (!isAdmin) return;
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (dragDepth.current === 0) setDragActive(false);
     e.preventDefault();
   }
   function onDrop(e: React.DragEvent) {
-    if (!isAdmin) return;
     e.preventDefault();
     dragDepth.current = 0;
     setDragActive(false);
@@ -263,16 +259,14 @@ export default function MapShell({
                 </button>
               )}
             </div>
-            {isAdmin && (
-              <Link
-                href="/map/new"
-                className="icon-btn accent"
-                title="Add accessory"
-                aria-label="Add accessory"
-              >
-                <Plus size={20} aria-hidden />
-              </Link>
-            )}
+            <Link
+              href="/map/new"
+              className="icon-btn accent"
+              title="Add accessory"
+              aria-label="Add accessory"
+            >
+              <Plus size={20} aria-hidden />
+            </Link>
           </div>
           <div className="sheet-body">
             <div className="sheet-section-label">All accessories</div>
@@ -280,9 +274,7 @@ export default function MapShell({
               <div className="empty-min">
                 {q
                   ? `No matches for "${q}"`
-                  : isAdmin
-                    ? "No accessories yet. Tap + to add one."
-                    : "Ask your family organizer to add accessories."}
+                  : "No accessories yet. Tap + to add one."}
               </div>
             ) : (
               filtered.map((a) => (
@@ -314,28 +306,22 @@ function DeviceRow({ a }: { a: AccessoryListItem }) {
           />
         </div>
         <span className="drow-sub ellipsis">
-          {a.latest?.place ? (
-            <>{a.latest.place}</>
-          ) : (
-            <>{deviceTypeLabel(a.type)}</>
-          )}
-          {a.primary && (
-            <>
-              <span className="dot-sep">·</span>
-              <span style={{ color: "var(--text-faint)" }}>
-                {a.primary.name}
-              </span>
-            </>
-          )}
-          {a.latest && (
-            <>
-              <span className="dot-sep">·</span>
+          {a.latest?.place ? a.latest.place : deviceTypeLabel(a.type)}
+        </span>
+        {(a.primary || a.latest) && (
+          <span
+            className="drow-sub ellipsis"
+            style={{ fontSize: 12, color: "var(--text-faint)" }}
+          >
+            {a.primary && <span>{a.primary.name}</span>}
+            {a.primary && a.latest && <span className="dot-sep">·</span>}
+            {a.latest && (
               <span style={{ color: "var(--accent)" }}>
                 {relativeAgo(a.latest.timestamp)}
               </span>
-            </>
-          )}
-        </span>
+            )}
+          </span>
+        )}
       </div>
       <div className="drow-end">
         {a.latest && <BatteryIndicator statusByte={a.latest.status} />}

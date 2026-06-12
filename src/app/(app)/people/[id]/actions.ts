@@ -13,9 +13,7 @@ const COLOR_IDS = COLORS.map((c) => c.id) as [string, ...string[]];
 
 const UpdateMemberSchema = z.object({
   id: z.string().min(1),
-  // Name is admin-only; the form omits this field for self-edit and
-  // we fall back to the existing value.
-  name: z.string().trim().optional(),
+  name: z.string().trim().min(1, "Enter a name."),
   title: z.string().trim().optional(),
   color: z.enum(COLOR_IDS).default(DEFAULT_COLOR_ID),
   // Blank = leave existing password unchanged.
@@ -55,14 +53,11 @@ export async function updateMember(
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing) return { ok: false, message: "Member not found." };
 
-  // Non-admin self-edit keeps existing name; admins can rename.
-  const nextName = isAdmin && name ? name : existing.name;
-
   const data: Parameters<typeof db.user.update>[0]["data"] = {
-    name: nextName,
+    name,
     title: title || null,
     color,
-    initials: initialsFromName(nextName) || existing.initials,
+    initials: initialsFromName(name) || existing.initials,
   };
   if (password && password.length > 0) {
     if (password.length < 8) {

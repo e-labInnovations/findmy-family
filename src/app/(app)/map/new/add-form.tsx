@@ -22,16 +22,30 @@ interface ImportInfo {
   text: string;
 }
 
-export function AddAccessoryForm({ members }: { members: MemberLite[] }) {
+export function AddAccessoryForm({
+  members,
+  currentUserId,
+  isAdmin,
+}: {
+  members: MemberLite[];
+  currentUserId: string;
+  isAdmin: boolean;
+}) {
   const [state, formAction, pending] = useActionState(addAccessory, initialState);
   const [name, setName] = useState("");
   const [type, setType] = useState("tag");
   const [color, setColor] = useState(DEFAULT_COLOR_ID);
+  // Members must be the primary owner of accessories they add (and can't
+  // remove themselves from ownership). Admins get free choice.
   const [ownerIds, setOwnerIds] = useState<string[]>(
-    members.length === 1 ? [members[0].id] : [],
+    isAdmin
+      ? members.length === 1
+        ? [members[0].id]
+        : []
+      : [currentUserId],
   );
   const [primary, setPrimary] = useState<string>(
-    members.length === 1 ? members[0].id : "",
+    isAdmin ? (members.length === 1 ? members[0].id : "") : currentUserId,
   );
   const [imported, setImported] = useState<ImportInfo | null>(null);
   const [importErr, setImportErr] = useState<string | null>(null);
@@ -73,6 +87,8 @@ export function AddAccessoryForm({ members }: { members: MemberLite[] }) {
   }
 
   function toggleOwner(id: string) {
+    // Members can't remove themselves from ownership.
+    if (!isAdmin && id === currentUserId) return;
     setOwnerIds((prev) => {
       const has = prev.includes(id);
       const next = has ? prev.filter((x) => x !== id) : [...prev, id];
@@ -80,6 +96,11 @@ export function AddAccessoryForm({ members }: { members: MemberLite[] }) {
       if (!has && !primary) setPrimary(id);
       return next;
     });
+  }
+  function trySetPrimary(id: string) {
+    // Non-admin members are locked to themselves as primary.
+    if (!isAdmin) return;
+    setPrimary(id);
   }
 
   const hasKeys = !!imported || showManual;
@@ -401,7 +422,9 @@ export function AddAccessoryForm({ members }: { members: MemberLite[] }) {
                 <button
                   type="button"
                   className={"primary-toggle" + (isP ? " on" : "")}
-                  onClick={() => setPrimary(m.id)}
+                  onClick={() => trySetPrimary(m.id)}
+                  disabled={!isAdmin}
+                  title={!isAdmin && !isP ? "Only admins can change the primary owner" : undefined}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"

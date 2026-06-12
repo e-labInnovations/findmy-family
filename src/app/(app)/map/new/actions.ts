@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireUser } from "@/lib/auth-helpers";
 import { encryptAtRest } from "@/lib/crypto-at-rest";
 import { parseKeysText } from "@/lib/keyfile";
 import { COLORS, DEFAULT_COLOR_ID } from "@/lib/colors";
@@ -32,7 +32,8 @@ export async function addAccessory(
   _prev: AddAccessoryState | undefined,
   formData: FormData,
 ): Promise<AddAccessoryState> {
-  await requireAdmin();
+  const me = await requireUser();
+  const isAdmin = me.role === "ADMIN";
 
   const parsed = AddAccessorySchema.safeParse({
     name: formData.get("name"),
@@ -46,6 +47,15 @@ export async function addAccessory(
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { name, type, color, keys, primaryOwnerId, owners } = parsed.data;
+
+  // Non-admin members must be the primary owner of accessories they add
+  // (the client UI locks this; the server is the source of truth).
+  if (!isAdmin && primaryOwnerId !== me.id) {
+    return {
+      ok: false,
+      message: "You must be the primary owner of accessories you add.",
+    };
+  }
 
   const parseRes = parseKeysText(keys);
   if (!parseRes.ok) {
