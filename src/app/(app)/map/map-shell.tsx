@@ -10,7 +10,6 @@ import {
   Plus,
   RotateCw,
   Search,
-  Users,
   X,
 } from "lucide-react";
 import MapView from "./map-client";
@@ -18,6 +17,7 @@ import type { MapPin } from "./map-view";
 import { colorOklch } from "@/lib/colors";
 import { DeviceIcon, deviceTypeLabel } from "@/lib/device-types";
 import { BatteryIndicator } from "@/lib/battery-display";
+import { BrandLogo } from "@/lib/brand-logo";
 import { useMyLocation } from "@/lib/use-my-location";
 import { ThemeToggle } from "@/lib/theme-toggle";
 import { Toast } from "@/lib/toast";
@@ -192,7 +192,7 @@ export default function MapShell({
         <div className="map-top">
           <div className="map-title">
             <div className="mt-logo">
-              <Users size={18} aria-hidden />
+              <BrandLogo size={18} />
             </div>
             <div
               className="col"
