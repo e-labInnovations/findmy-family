@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Info, LogOut, Users } from "lucide-react";
+import { Info, KeyRound, LogOut, Users } from "lucide-react";
 import { signOut } from "@/auth";
 import { requireUser } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
@@ -148,6 +148,25 @@ export default async function SettingsPage() {
             family app. Members sign in with their own family email &mdash;
             only the organizer links Apple here.
           </p>
+        </>
+      )}
+
+      {isAdmin && (
+        <>
+          <div className="set-section-label">Developer</div>
+          <div className="set-group">
+            <Link href="/settings/keygen" className="set-row">
+              <span className="set-ico">
+                <KeyRound size={18} aria-hidden />
+              </span>
+              <div className="col" style={{ flex: 1 }}>
+                <span className="set-label">Generate keys</span>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  Fresh P-224 keypair for a new tracker
+                </span>
+              </div>
+            </Link>
+          </div>
         </>
       )}
 
