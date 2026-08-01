@@ -15,21 +15,7 @@ as well as standard OpenHaystack/macless-haystack-compatible tags.
 - **Auth.js v5** (email + password member auth)
 - **Leaflet** + **OpenStreetMap** tiles
 - **Anisette** (Docker) for Apple GSA fingerprint headers
-- **Native Node port** of `pypush_gsa_icloud` (in progress — see `src/lib/apple/`)
-
-## Status
-
-V1 scope (in progress):
-
-- [x] Project scaffold + DB schema
-- [ ] Apple GSA SRP exchange (`src/lib/apple/gsa.ts`)
-- [ ] iCloud mobileme login + searchPartyToken
-- [ ] `/acsnservice/fetch` + AES-GCM report decryption (skeleton present in `src/lib/apple/crypto.ts` and `reports.ts`)
-- [ ] Auth.js member login
-- [ ] Admin link-Apple-ID OTP flow
-- [ ] Accessory CRUD + keyfile import
-- [ ] Member CRUD
-- [ ] Map view, detail sheet, theme, mobile sheet snap
+- **Native Node port** of `pypush_gsa_icloud` (see `src/lib/apple/`)
 
 ## Setup
 
@@ -63,7 +49,7 @@ src/
     crypto-at-rest.ts   AES-256-GCM for DB-stored secrets
     apple/
       anisette.ts       Anisette HTTP client
-      gsa.ts            Apple GSA SRP login (SCAFFOLD)
+      gsa.ts            Apple GSA SRP login
       reports.ts        /acsnservice/fetch + decrypt
       crypto.ts         ECDH + AES-GCM report decryption
 prisma/

@@ -96,37 +96,55 @@ export async function fetchAndIngest(
     const widestStart = computeStart(lastTimestamps, options.days ?? 7);
     const endDate = Date.now();
 
-    const lookups = accessories.map((a) => ({
-      hashedAdvKey: a.hashedAdvKey,
-      privateKey: decryptAtRest(a.privateKeyEnc),
-    }));
-
-    const dsid = decryptAtRest(account.dsidEnc).toString("utf-8");
-    const spToken = decryptAtRest(account.spTokenEnc).toString("utf-8");
-
-    try {
-      const flat = await fetchReports(
-        { dsid, spToken },
-        lookups,
-        { startDateMs: widestStart, endDateMs: endDate },
-      );
-      if (flat.length > 0) {
-        await persistReports(flat, byHash);
+    // Decrypt per-accessory keys defensively: an accessory whose private
+    // key was encrypted under a lost/rotated MASTER_KEY must not fail the
+    // whole batch. Skip it and let its cached history still render.
+    const lookups = accessories.flatMap((a) => {
+      try {
+        return [{ hashedAdvKey: a.hashedAdvKey, privateKey: decryptAtRest(a.privateKeyEnc) }];
+      } catch {
+        console.warn(`[apple] skipping accessory ${a.id}: private key won't decrypt (MASTER_KEY mismatch). Re-import its .keys file.`);
+        return [];
       }
-    } catch (e) {
-      if (e instanceof AppleTokensExpiredError) {
-        // We used to auto-mark expiresAt = epoch here, but a single
-        // 401/403 turned out to be a poor signal of real revocation —
-        // Apple returns 401 for rate limits, anisette hiccups, and
-        // transient infra too. The 30-day heuristic clock from
-        // finalize() is now the only thing that flips us to expired.
-        // Failed fetches just degrade silently to DB-cached history.
-        console.warn(
-          "[apple] /acsnservice/fetch rejected — keeping tokens, will retry next visit:",
-          (e as Error).message,
+    });
+
+    // Same for the Apple tokens: if they won't decrypt (lost MASTER_KEY),
+    // degrade to DB-cached history instead of throwing. Re-link fixes it.
+    let creds: { dsid: string; spToken: string } | null = null;
+    try {
+      creds = {
+        dsid: decryptAtRest(account.dsidEnc).toString("utf-8"),
+        spToken: decryptAtRest(account.spTokenEnc).toString("utf-8"),
+      };
+    } catch {
+      console.warn("[apple] tokens won't decrypt (MASTER_KEY mismatch) — re-link the Apple account in Settings. Serving cached history.");
+    }
+
+    if (creds && lookups.length > 0) {
+      try {
+        const flat = await fetchReports(
+          creds,
+          lookups,
+          { startDateMs: widestStart, endDateMs: endDate },
         );
-      } else {
-        throw e;
+        if (flat.length > 0) {
+          await persistReports(flat, byHash);
+        }
+      } catch (e) {
+        if (e instanceof AppleTokensExpiredError) {
+          // We used to auto-mark expiresAt = epoch here, but a single
+          // 401/403 turned out to be a poor signal of real revocation —
+          // Apple returns 401 for rate limits, anisette hiccups, and
+          // transient infra too. The 30-day heuristic clock from
+          // finalize() is now the only thing that flips us to expired.
+          // Failed fetches just degrade silently to DB-cached history.
+          console.warn(
+            "[apple] /acsnservice/fetch rejected — keeping tokens, will retry next visit:",
+            (e as Error).message,
+          );
+        } else {
+          throw e;
+        }
       }
     }
   }
